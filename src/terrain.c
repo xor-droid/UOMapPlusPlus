@@ -1366,15 +1366,27 @@ static void connect_pass(terrain_grid *g, const mapgen_config *cfg) {
             for (cur = start; cur != -1; cur = prev[cur]) {
                 if (bt[cur] == 0) continue;
                 int bx = cur % W, by = cur / W;
-                for (int dy = -1; dy <= 1; ++dy)       /* widen to a ~3-wide corridor */
-                    for (int dx = -1; dx <= 1; ++dx) {
+                /* Carve a wide corridor: a grassy valley floor with a dirt fringe
+                 * (natural pass) through mountains, or a sand causeway over water. */
+                const int PW = cfg->pass_width > 0 ? cfg->pass_width : 6;
+                int core = PW - 2; if (core < 1) core = 1;
+                for (int dy = -PW; dy <= PW; ++dy)
+                    for (int dx = -PW; dx <= PW; ++dx) {
+                        int r2 = dx * dx + dy * dy;
+                        if (r2 > PW * PW) continue;
                         int nx = bx + dx, ny = by + dy;
                         if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
                         size_t i = (size_t)nx + (size_t)ny * W;
                         int cc = g->cat[i];
                         if (cc == TCAT_MOUNTAIN) {
-                            g->cat[i] = (uint8_t)TCAT_PASS;          /* preview highlight */
-                            g->id[i] = tile_for_cat(TCAT_HILL);      /* walkable dirt */
+                            if (r2 <= core * core) {              /* grassy valley floor */
+                                g->cat[i] = (uint8_t)TCAT_GRASS;
+                                g->id[i] = biome_tile(TCAT_GRASS,
+                                           cell_hash(cfg->seed, nx, ny, NOISE_LAYER_BIOME));
+                            } else {                              /* dirt fringe (preview-highlighted) */
+                                g->cat[i] = (uint8_t)TCAT_PASS;
+                                g->id[i] = tile_for_cat(TCAT_HILL);
+                            }
                             g->z[i] = (int8_t)clampi(zc, -128, 127);
                         } else if (IS_WATER_CAT(cc)) {
                             int wz = zc > cfg->water_z + 1 ? zc : cfg->water_z + 1;
