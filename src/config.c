@@ -51,6 +51,9 @@ void config_defaults(mapgen_config *cfg) {
     cfg->erosion_erode      = 0.30;
     cfg->erosion_deposition = 0.30;
     cfg->erosion_z_scale    = 1.0;   /* eroded relief (z units) folded back 1:1 */
+    cfg->regions            = 0;     /* off by default: existing maps unchanged */
+    cfg->region_spacing     = 64;
+    cfg->region_jitter      = 0.6;
     cfg->emit_mapdef = 0;
     cfg->terrain_only = 0;
     cfg->emit_pass_previews = 0;
@@ -171,6 +174,12 @@ int config_set_kv(mapgen_config *cfg, const char *key_in, const char *val) {
         cfg->erosion_deposition = strtod(val, NULL);
     } else if (!strcmp(key, "erosion_z_scale")) {
         cfg->erosion_z_scale = strtod(val, NULL);
+    } else if (!strcmp(key, "regions")) {
+        if (parse_bool(val, &cfg->regions) != 0) return -1;
+    } else if (!strcmp(key, "region_spacing")) {
+        cfg->region_spacing = (int)strtol(val, NULL, 0);
+    } else if (!strcmp(key, "region_jitter")) {
+        cfg->region_jitter = strtod(val, NULL);
     } else if (!strcmp(key, "out")) {
         snprintf(cfg->out_dir, sizeof(cfg->out_dir), "%s", val);
     } else if (!strcmp(key, "tiledata")) {
@@ -340,6 +349,14 @@ int config_validate(const mapgen_config *cfg) {
         }
         if (cfg->erosion_z_scale < 0.0) {
             fprintf(stderr, "error: erosion-z-scale (%g) must be >= 0\n", cfg->erosion_z_scale); ok = 0;
+        }
+    }
+    if (cfg->regions) {
+        if (cfg->region_spacing < 4) {
+            fprintf(stderr, "error: region-spacing (%d) must be >= 4\n", cfg->region_spacing); ok = 0;
+        }
+        if (cfg->region_jitter < 0.0 || cfg->region_jitter > 1.0) {
+            fprintf(stderr, "error: region-jitter (%g) must be in [0,1]\n", cfg->region_jitter); ok = 0;
         }
     }
     if (cfg->continent) {

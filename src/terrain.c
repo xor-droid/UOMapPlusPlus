@@ -3,6 +3,9 @@
 #include "uomappp/biome.h"
 #include "uomappp/preview.h"
 #include "uomappp/erosion.h"
+#include "uomappp/voronoi.h"
+#include "uomappp/marching.h"
+#include "uomappp/mst.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -521,6 +524,125 @@ static void carve_passes(terrain_grid *g, const mapgen_config *cfg) {
     }
 }
 
+/* Climate-biome categories eligible for territorial reassignment (elevation
+ * features — hills/mountains/sand/water — are left alone). */
+static int is_climate_cat(int c) {
+    return c == TCAT_GRASS || c == TCAT_FOREST || c == TCAT_DESERT ||
+           c == TCAT_JUNGLE || c == TCAT_SWAMP || c == TCAT_SNOW;
+}
+
+/*
+ * Regions pass (Voronoi territories + marching-squares borders + MST graph).
+ * Partitions the map into organic territories, gives each a climate (so biomes
+ * become coherent patches with Voronoi borders instead of latitude bands),
+ * marks region borders into g->flags, and builds the MST connectivity graph
+ * over the territories (reported now; roads will route it in Phase 5).
+ * g->region and g->flags persist on the grid for later passes.
+ */
+static void regions_pass(terrain_grid *g, const mapgen_config *cfg) {
+    const int W = g->width, H = g->height;
+    const size_t n = (size_t)W * (size_t)H;
+
+    g->region = (int32_t *)malloc(n * sizeof(int32_t));
+    g->flags  = (uint8_t *)malloc(n);
+    if (!g->region || !g->flags) {
+        free(g->region); g->region = NULL;
+        free(g->flags);  g->flags  = NULL;
+        fprintf(stderr, "warning: regions skipped (out of memory)\n");
+        return;
+    }
+
+    voronoi_diagram vd;
+    if (voronoi_build(&vd, g->region, W, H, cfg->seed,
+                      cfg->region_spacing, cfg->region_jitter) != 0) {
+        free(g->region); g->region = NULL;
+        free(g->flags);  g->flags  = NULL;
+        fprintf(stderr, "warning: regions skipped (voronoi alloc failed)\n");
+        return;
+    }
+    const int ns = vd.n;
+
+    /* Per-region climate: latitude temperature at the site + a per-region jitter
+     * and moisture draw (deterministic in the region id). */
+    double *rtemp = (double *)malloc((size_t)ns * sizeof(double));
+    double *rmoist = (double *)malloc((size_t)ns * sizeof(double));
+    if (rtemp && rmoist) {
+        for (int id = 0; id < ns; ++id) {
+            uint64_t s = cfg->seed
+                       ^ (0xC2B2AE3D27D4EB4FULL * (uint64_t)(id + 1))
+                       ^ ((uint64_t)NOISE_LAYER_VORONOI << 40);
+            double mo = (double)(noise_splitmix64(&s) >> 11) / 9007199254740992.0;
+            double tj = (double)(noise_splitmix64(&s) >> 11) / 9007199254740992.0;
+            double ny2 = (H > 1) ? vd.sites[id].y / (double)(H - 1) : 0.5;
+            double lat = 1.0 - 2.0 * fabs(ny2 - 0.5);          /* 0 poles .. 1 centre */
+            rtemp[id]  = (lat * 2.0 - 1.0) * 0.65 + (tj * 2.0 - 1.0) * 0.25
+                       + cfg->temperature_bias;
+            rmoist[id] = mo * 2.0 - 1.0;                        /* match noise scale */
+        }
+
+        const double zmax = cfg->land_z_max > 0 ? (double)cfg->land_z_max : 1.0;
+        long reclassified = 0;
+        for (int y = 0; y < H; ++y)
+            for (int x = 0; x < W; ++x) {
+                size_t i = (size_t)x + (size_t)y * W;
+                int c = g->cat[i];
+                if (!is_climate_cat(c)) continue;
+                int id = g->region[i];
+                double hh = (double)g->z[i] / zmax;
+                if (hh < 0.0) hh = 0.0;
+                if (hh > 1.0) hh = 1.0;
+                int nc = biome_classify(hh, rtemp[id], rmoist[id]);
+                if (nc != c) {
+                    g->cat[i] = (uint8_t)nc;
+                    g->id[i]  = biome_tile(nc, cell_hash(cfg->seed, x, y, NOISE_LAYER_BIOME));
+                    ++reclassified;
+                }
+            }
+
+        /* Region borders -> g->flags (for later tile-transition passes). */
+        long borders = marching_squares_borders(g->region, g->flags, W, H);
+
+        /* MST over the territory graph (jittered-grid adjacency). */
+        const int gx = vd.gx, gy = vd.gy;
+        int cap = 4 * ns + 8;
+        mst_edge *edges = (mst_edge *)malloc((size_t)cap * sizeof(mst_edge));
+        mst_edge *tree  = (mst_edge *)malloc((size_t)(ns > 0 ? ns : 1) * sizeof(mst_edge));
+        long treeN = 0; double treeLen = 0.0;
+        if (edges && tree) {
+            int ne = 0;
+            for (int b = 0; b < gy; ++b)
+                for (int a = 0; a < gx; ++a) {
+                    int id = b * gx + a;
+                    int nb[4][2] = { {a + 1, b}, {a, b + 1}, {a + 1, b + 1}, {a - 1, b + 1} };
+                    for (int k = 0; k < 4; ++k) {
+                        int na = nb[k][0], mb = nb[k][1];
+                        if (na < 0 || mb < 0 || na >= gx || mb >= gy) continue;
+                        int jd = mb * gx + na;
+                        if (ne >= cap) continue;
+                        double dx = vd.sites[id].x - vd.sites[jd].x;
+                        double dy = vd.sites[id].y - vd.sites[jd].y;
+                        edges[ne].a = id; edges[ne].b = jd;
+                        edges[ne].w = sqrt(dx * dx + dy * dy);
+                        ++ne;
+                    }
+                }
+            int k = mst_build(edges, ne, ns, tree);
+            if (k > 0) {
+                treeN = k;
+                for (int e = 0; e < k; ++e) treeLen += tree[e].w;
+            }
+        }
+        free(edges); free(tree);
+
+        fprintf(stderr,
+            "regions: %d territories (spacing %d), %ld cells reclassified, "
+            "%ld border cells, MST %ld edges (%.0f tiles)\n",
+            ns, vd.spacing, reclassified, borders, treeN, treeLen);
+    }
+    free(rtemp); free(rmoist);
+    voronoi_free(&vd);
+}
+
 int terrain_generate(terrain_grid *g, const mapgen_config *cfg,
                      const tiledata_land *td, struct preview_ctx *pv) {
     const int W = cfg->width, H = cfg->height;
@@ -738,6 +860,12 @@ int terrain_generate(terrain_grid *g, const mapgen_config *cfg,
     if (cfg->erosion) {
         erosion_apply(g, cfg);
         preview_pass(pv, g, "erosion");
+    }
+
+    /* Voronoi territories: organic climate biomes + territory graph. */
+    if (cfg->regions) {
+        regions_pass(g, cfg);
+        preview_pass(pv, g, "regions");
     }
 
     if (cfg->rivers) {

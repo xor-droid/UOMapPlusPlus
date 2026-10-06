@@ -12,9 +12,10 @@ a given seed/config**. A map is fully described by its seed and configuration.
    as part of the contract, and **new salts are only ever appended** (never
    reordered or reused), so adding a pass cannot change existing maps. Salts so
    far: elevation/moisture/detail/continent/meander/temperature/biome/veg
-   (`0x01`–`0x08`) and `NOISE_LAYER_EROSION` (`0x09`, the hydraulic-erosion
-   droplet-spawn stream). The erosion pass is off by default; with it off, output
-   is byte-identical to pre-erosion builds.
+   (`0x01`–`0x08`), `NOISE_LAYER_EROSION` (`0x09`, hydraulic-erosion droplet
+   spawns) and `NOISE_LAYER_VORONOI` (`0x0A`, Voronoi site jitter + per-region
+   climate). The erosion and regions passes are off by default; with them off,
+   output is byte-identical to the pre-fork builds.
 3. **No nondeterministic inputs.** No `rand()`, no `time()`, no threads, and
    **no environment variables**. Configuration is CLI flags + optional file only.
 4. **Fixed iteration order.** Terrain generation and the slope-limiting passes

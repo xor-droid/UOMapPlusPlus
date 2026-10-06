@@ -49,6 +49,9 @@ enum {
     OPT_EROSION_LIFETIME,
     OPT_EROSION_RADIUS,
     OPT_EROSION_ZSCALE,
+    OPT_REGIONS,
+    OPT_REGION_SPACING,
+    OPT_REGION_JITTER,
     OPT_PASS_PREVIEWS,
     OPT_PASS_PREVIEW_DIR,
     OPT_INSTALL_DIR
@@ -107,6 +110,10 @@ static void print_help(const char *argv0) {
 "  --erosion-z-scale <f>     How strongly eroded relief folds back into z\n"
 "                            (1.0 = full carve; default 1.0).\n"
 "                            (erosion-erode / erosion-deposition: config file only.)\n"
+"  Regions (off by default; Voronoi climate territories -> organic biomes):\n"
+"  --regions                 Partition the map into Voronoi biome territories.\n"
+"  --region-spacing <n>      Territory size: site spacing in tiles (default 64).\n"
+"  --region-jitter <f>       Site jitter within its cell, [0,1] (default 0.6).\n"
 "  Enrichment (all ON by default; use the --no-* flags to disable):\n"
 "  --no-biomes               Disable climate biomes (snow/desert/jungle/swamp).\n"
 "  --temperature-bias <f>    Shift climate warmer(+)/colder(-) (default 0).\n"
@@ -216,6 +223,9 @@ int main(int argc, char **argv) {
         { "erosion-lifetime",  required_argument, 0, OPT_EROSION_LIFETIME },
         { "erosion-radius",    required_argument, 0, OPT_EROSION_RADIUS },
         { "erosion-z-scale",   required_argument, 0, OPT_EROSION_ZSCALE },
+        { "regions",           no_argument,       0, OPT_REGIONS },
+        { "region-spacing",    required_argument, 0, OPT_REGION_SPACING },
+        { "region-jitter",     required_argument, 0, OPT_REGION_JITTER },
         { "tiledata",    required_argument, 0, 'T' },
         { "preview",     required_argument, 0, 'P' },
         { "pass-previews",    no_argument,       0, OPT_PASS_PREVIEWS },
@@ -275,6 +285,9 @@ int main(int argc, char **argv) {
             case OPT_EROSION_LIFETIME: cfg.erosion = 1; cfg.erosion_lifetime = (int)strtol(optarg, NULL, 0); break;
             case OPT_EROSION_RADIUS:   cfg.erosion = 1; cfg.erosion_radius = (int)strtol(optarg, NULL, 0); break;
             case OPT_EROSION_ZSCALE:   cfg.erosion = 1; cfg.erosion_z_scale = strtod(optarg, NULL); break;
+            case OPT_REGIONS:        cfg.regions = 1; break;
+            case OPT_REGION_SPACING: cfg.regions = 1; cfg.region_spacing = (int)strtol(optarg, NULL, 0); break;
+            case OPT_REGION_JITTER:  cfg.regions = 1; cfg.region_jitter = strtod(optarg, NULL); break;
             case 'T': snprintf(cfg.tiledata_path, sizeof(cfg.tiledata_path), "%s", optarg); break;
             case 'P': snprintf(cfg.preview_path, sizeof(cfg.preview_path), "%s", optarg); break;
             case OPT_PASS_PREVIEWS: cfg.emit_pass_previews = 1; break;

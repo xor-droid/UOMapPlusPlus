@@ -58,6 +58,9 @@ typedef struct {
     double   erosion_erode;      /* [0,1] fraction of free capacity eroded per step */
     double   erosion_deposition; /* [0,1] fraction of excess sediment deposited */
     double   erosion_z_scale;    /* how strongly eroded relief folds back into z (1.0=full) */
+    int      regions;       /* bool: Voronoi climate territories (organic biomes) */
+    int      region_spacing;     /* Voronoi site spacing in tiles (territory size) */
+    double   region_jitter;      /* [0,1] site jitter within its grid cell */
     int      emit_mapdef;   /* bool: also write map-definitions.snippet.json */
     int      terrain_only;  /* bool: write only mapN.mul (skip statics) */
     int      emit_pass_previews; /* bool: write a PNG snapshot after each pass */

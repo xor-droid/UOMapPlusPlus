@@ -37,6 +37,9 @@ add_executable(uomappp
   src/install.c
   src/field.c
   src/erosion.c
+  src/voronoi.c
+  src/marching.c
+  src/mst.c
 )
 
 target_include_directories(uomappp PRIVATE

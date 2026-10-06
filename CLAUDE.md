@@ -89,6 +89,17 @@ out/                      generated output (NOT committed)
                (`hfield`) BEFORE rivers, so rivers follow the eroded drainage.
                Droplets spawn from a splitmix64 stream keyed by
                `NOISE_LAYER_EROSION`; mountains keep their peaks.
+- `voronoi`  — raster (jittered-grid) **Voronoi territories**: sites + per-cell
+               nearest-site `region` label. Salt `NOISE_LAYER_VORONOI`. (We
+               compute the partition directly on the raster instead of vendoring
+               a polygon Voronoi lib.)
+- `marching` — **marching-squares** boundary extraction: marks region/biome
+               border cells (the raster 2×2 crossing test) into `g->flags`.
+- `mst`      — **minimum spanning tree** (Kruskal + union-find) over the
+               territory graph: the town-connectivity graph roads will route.
+               The `regions` terrain pass (off by default) ties these together:
+               fills `g->region`, gives each territory a climate so biomes become
+               organic Voronoi patches, flags borders, and builds the MST.
 - `tiledata` — reads the land section of `tiledata.mul` (High Seas format) to
                sanity-check palette tile flags (Wet / Impassable). Optional.
 - `biome`    — climate-band biome classification (temperature-by-latitude +
@@ -196,8 +207,10 @@ in a fixed order by the pipeline orchestrator, each emitting a per-pass PNG:
    SciPy/NumPy reimplemented in C); erosion runs before rivers so drainage feeds
    them. Gated off by default → existing maps byte-identical; deterministic when
    on (sha256 gate, two runs).
-5. ⬜ **Phase 3 — Regions:** Voronoi/Delaunay biomes & territories; marching
-   squares coast/biome boundaries; MST connectivity graph over town candidates.
+5. ✅ **Phase 3 — Regions:** Voronoi territories (`voronoi`, salt `0x0A`) →
+   organic climate biomes; marching-squares borders (`marching`) → `g->flags`;
+   MST territory graph (`mst`). Gated by `regions` (off by default →
+   byte-identical; deterministic when on). Allocates `g->region` + `g->flags`.
 6. ⬜ **Phase 4 — Transitions & organic regions:** WFC tile transitions; cellular
    automata caves/swamps/forest clumps/ruins.
 7. ⬜ **Phase 5 — Civilization:** town placement (Poisson-disc within Voronoi
