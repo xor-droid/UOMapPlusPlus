@@ -1373,7 +1373,8 @@ static void connect_pass(terrain_grid *g, const mapgen_config *cfg) {
                         size_t i = (size_t)nx + (size_t)ny * W;
                         int cc = g->cat[i];
                         if (cc == TCAT_MOUNTAIN) {
-                            g->cat[i] = (uint8_t)TCAT_HILL; g->id[i] = tile_for_cat(TCAT_HILL);
+                            g->cat[i] = (uint8_t)TCAT_PASS;          /* preview highlight */
+                            g->id[i] = tile_for_cat(TCAT_HILL);      /* walkable dirt */
                             g->z[i] = (int8_t)clampi(zc, -128, 127);
                         } else if (IS_WATER_CAT(cc)) {
                             int wz = zc > cfg->water_z + 1 ? zc : cfg->water_z + 1;

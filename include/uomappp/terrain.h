@@ -33,6 +33,7 @@ enum {
     TCAT_FLOOR,         /* building floor */
     TCAT_WALL,          /* building wall */
     TCAT_ORE,           /* resource/mineral node */
+    TCAT_PASS,          /* carved mountain pass (walkable dirt; preview highlight) */
     TCAT_COUNT
 };
 

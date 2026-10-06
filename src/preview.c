@@ -24,10 +24,11 @@ static const rgb CAT_COLOR[TCAT_COUNT] = {
     [TCAT_SNOW]          = { 235, 240, 245 },
     [TCAT_LAKE]          = {  80, 140, 215 },
     [TCAT_ROAD]          = { 150, 120,  85 },
-    [TCAT_BRIDGE]        = { 160, 110,  70 },
+    [TCAT_BRIDGE]        = { 245, 210,  40 },   /* bright yellow: causeway/river crossing */
     [TCAT_FLOOR]         = { 190, 170, 140 },
     [TCAT_WALL]          = {  90,  80,  75 },
     [TCAT_ORE]           = { 175, 145, 100 },
+    [TCAT_PASS]          = { 245, 160,  30 },   /* bright orange: carved mountain pass */
 };
 
 static unsigned char clampu8(int v) {
