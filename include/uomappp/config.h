@@ -79,6 +79,11 @@ typedef struct {
     int      terrace;       /* bool: flatten land into plateaus (Britannia-like) */
     int      terrace_step;       /* z quantization step for terraces */
     int      plain_z;            /* land at or below |plain_z| snaps flat to 0 */
+    int      connect;       /* bool: connect cut-off land via passes/bridges */
+    int      connect_max;        /* max barrier-crossing cost (caps bridge length) */
+    int      clearings;     /* bool: reserve flat vegetation-free building plots */
+    int      clearing_spacing;   /* min distance between clearings (Poisson radius) */
+    int      clearing_size;      /* clearing radius in tiles */
     int      emit_mapdef;   /* bool: also write map-definitions.snippet.json */
     int      terrain_only;  /* bool: write only mapN.mul (skip statics) */
     int      emit_pass_previews; /* bool: write a PNG snapshot after each pass */

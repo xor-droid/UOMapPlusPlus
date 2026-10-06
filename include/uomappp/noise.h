@@ -37,7 +37,8 @@ enum {
     NOISE_LAYER_RESOURCE  = 0x12,  /* Poisson-disc resource node placement */
     NOISE_LAYER_DITHER    = 0x13,  /* biome-border dithering */
     NOISE_LAYER_CLIFF     = 0x14,  /* mountain rock-tile variation + cliff faces */
-    NOISE_LAYER_CONTPLACE = 0x15   /* continent center placement (positions by seed) */
+    NOISE_LAYER_CONTPLACE = 0x15,  /* continent center placement (positions by seed) */
+    NOISE_LAYER_CLEARING  = 0x16   /* Poisson building-clearing placement */
 };
 
 /* splitmix64: fixed, portable 64-bit mixer used for seed derivation. */

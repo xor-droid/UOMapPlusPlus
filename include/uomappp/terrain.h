@@ -76,6 +76,9 @@ typedef struct {
 void terrain_add_static(terrain_grid *g, uint16_t id, int x, int y,
                         int z, int16_t hue);
 
+/* g->flags bit: cell is a reserved building clearing (no vegetation placed). */
+#define TGRID_FLAG_CLEARED 0x02u
+
 /* Forward declaration: the per-pass preview context lives in preview.h. Passing
  * NULL disables intermediate previews. */
 struct preview_ctx;

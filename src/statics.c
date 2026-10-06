@@ -85,7 +85,10 @@ int statics_write(const terrain_grid *g, const mapgen_config *cfg,
                 for (int cx = 0; cx < 8; ++cx) {
                     int x = (bx << 3) + cx, y = (by << 3) + cy;
                     size_t idx = (size_t)x + (size_t)y * (size_t)W;
-                    int k = vegetation_place(cfg, g->cat[idx], cx, cy, g->z[idx],
+                    /* Reserved clearings get no vegetation (buildable ground). */
+                    int cleared = g->flags && (g->flags[idx] & TGRID_FLAG_CLEARED);
+                    int k = cleared ? 0
+                          : vegetation_place(cfg, g->cat[idx], cx, cy, g->z[idx],
                                              x, y, &buf[nb]);
                     nb += k;
                 }

@@ -72,6 +72,11 @@ void config_defaults(mapgen_config *cfg) {
     cfg->terrace            = 0;
     cfg->terrace_step       = 5;
     cfg->plain_z            = 3;
+    cfg->connect            = 0;
+    cfg->connect_max        = 2000;  /* block-cost budget: long mountain passes, short water bridges */
+    cfg->clearings          = 0;
+    cfg->clearing_spacing   = 140;
+    cfg->clearing_size      = 10;
     cfg->emit_mapdef = 0;
     cfg->terrain_only = 0;
     cfg->emit_pass_previews = 0;
@@ -236,6 +241,16 @@ int config_set_kv(mapgen_config *cfg, const char *key_in, const char *val) {
         cfg->terrace_step = (int)strtol(val, NULL, 0);
     } else if (!strcmp(key, "plain_z")) {
         cfg->plain_z = (int)strtol(val, NULL, 0);
+    } else if (!strcmp(key, "connect")) {
+        if (parse_bool(val, &cfg->connect) != 0) return -1;
+    } else if (!strcmp(key, "connect_max")) {
+        cfg->connect_max = (int)strtol(val, NULL, 0);
+    } else if (!strcmp(key, "clearings")) {
+        if (parse_bool(val, &cfg->clearings) != 0) return -1;
+    } else if (!strcmp(key, "clearing_spacing")) {
+        cfg->clearing_spacing = (int)strtol(val, NULL, 0);
+    } else if (!strcmp(key, "clearing_size")) {
+        cfg->clearing_size = (int)strtol(val, NULL, 0);
     } else if (!strcmp(key, "out")) {
         snprintf(cfg->out_dir, sizeof(cfg->out_dir), "%s", val);
     } else if (!strcmp(key, "tiledata")) {
@@ -422,6 +437,9 @@ int config_dump(const mapgen_config *cfg, const char *path) {
     fprintf(f, "resource_spacing = %d\n", cfg->resource_spacing);
     fprintf(f, "terrace_step = %d\n", cfg->terrace_step);
     fprintf(f, "plain_z = %d\n", cfg->plain_z);
+    fprintf(f, "connect_max = %d\n", cfg->connect_max);
+    fprintf(f, "clearing_spacing = %d\n", cfg->clearing_spacing);
+    fprintf(f, "clearing_size = %d\n", cfg->clearing_size);
     fprintf(f, "out = %s\n", cfg->out_dir);
     fprintf(f, "tiledata = %s\n", cfg->tiledata_path);
     if (cfg->preview_path[0])     fprintf(f, "preview = %s\n", cfg->preview_path);
@@ -453,6 +471,8 @@ int config_dump(const mapgen_config *cfg, const char *path) {
     fprintf(f, "resources = %s\n",    cfg->resources ? "true" : "false");
     fprintf(f, "cliffs = %s\n",       cfg->cliffs ? "true" : "false");
     fprintf(f, "terrace = %s\n",      cfg->terrace ? "true" : "false");
+    fprintf(f, "connect = %s\n",      cfg->connect ? "true" : "false");
+    fprintf(f, "clearings = %s\n",    cfg->clearings ? "true" : "false");
     fprintf(f, "emit_mapdef = %s\n",  cfg->emit_mapdef ? "true" : "false");
     fprintf(f, "terrain_only = %s\n", cfg->terrain_only ? "true" : "false");
     fprintf(f, "pass_previews = %s\n", cfg->emit_pass_previews ? "true" : "false");
@@ -579,6 +599,17 @@ int config_validate(const mapgen_config *cfg) {
         }
         if (cfg->plain_z < 0 || cfg->plain_z > 127) {
             fprintf(stderr, "error: plain-z (%d) must be in 0..127\n", cfg->plain_z); ok = 0;
+        }
+    }
+    if (cfg->connect && cfg->connect_max < 1) {
+        fprintf(stderr, "error: connect-max (%d) must be >= 1\n", cfg->connect_max); ok = 0;
+    }
+    if (cfg->clearings) {
+        if (cfg->clearing_spacing < 16) {
+            fprintf(stderr, "error: clearing-spacing (%d) must be >= 16\n", cfg->clearing_spacing); ok = 0;
+        }
+        if (cfg->clearing_size < 2 || cfg->clearing_size > 64) {
+            fprintf(stderr, "error: clearing-size (%d) must be in 2..64\n", cfg->clearing_size); ok = 0;
         }
     }
     if (cfg->continent) {

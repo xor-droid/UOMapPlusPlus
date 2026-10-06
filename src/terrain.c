@@ -16,6 +16,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
 #include <math.h>
 
 /* Deterministic per-cell hash (for tile variation). */
@@ -1234,6 +1235,214 @@ static void cliffs_pass(terrain_grid *g, const mapgen_config *cfg) {
             varied, faces);
 }
 
+/* --- Connectivity: carve passes/bridges so no land is cut off ------------- */
+
+#define CELL_WALK(c) (!IS_WATER_CAT(c) && (c) != TCAT_MOUNTAIN)
+
+static int block_walk_z(const terrain_grid *g, int bx, int by) {
+    const int W = g->width;
+    for (int cy = 0; cy < 8; ++cy)
+        for (int cx = 0; cx < 8; ++cx) {
+            size_t i = (size_t)(bx * 8 + cx) + (size_t)(by * 8 + cy) * W;
+            if (CELL_WALK(g->cat[i])) return g->z[i];
+        }
+    return 0;
+}
+
+/*
+ * Connect cut-off land. Works on the 8x8 block grid: classify each block as
+ * walkable / mountain / water, label the connected walkable regions, then run a
+ * multi-source Dijkstra (Dial's buckets) outward from the largest region over
+ * the barrier blocks (mountain cheap, water expensive). Every other region
+ * within the connect_max cost budget gets a corridor carved to the mainland
+ * along the cheapest barrier crossing: mountain -> walkable dirt pass, water ->
+ * land causeway, with z ramped between the two ends. The budget caps water
+ * crossings to narrow gaps so separate continents are NOT bridged across open
+ * ocean. Deterministic (no RNG). Gated by `connect`.
+ */
+static void connect_pass(terrain_grid *g, const mapgen_config *cfg) {
+    const int W = g->width, H = g->height;
+    const int BW = W >> 3, BH = H >> 3, NB = BW * BH;
+    if (NB <= 1) return;
+    const int MAXC = cfg->connect_max > 0 ? cfg->connect_max : 2000;
+    const int CW = 1, CM = 1, CWAT = 400;   /* enter cost: walk, mountain, water */
+
+    uint8_t *bt   = (uint8_t *)malloc((size_t)NB);
+    int     *comp = (int *)malloc((size_t)NB * sizeof(int));
+    int     *q    = (int *)malloc((size_t)NB * sizeof(int));
+    if (!bt || !comp || !q) { free(bt); free(comp); free(q);
+        fprintf(stderr, "warning: connect skipped (out of memory)\n"); return; }
+
+    for (int by = 0; by < BH; ++by)
+        for (int bx = 0; bx < BW; ++bx) {
+            int wc = 0, mc = 0, wa = 0;
+            for (int cy = 0; cy < 8; ++cy)
+                for (int cx = 0; cx < 8; ++cx) {
+                    int c = g->cat[(size_t)(bx*8+cx) + (size_t)(by*8+cy)*W];
+                    if (c == TCAT_MOUNTAIN) ++mc;
+                    else if (IS_WATER_CAT(c)) ++wa;
+                    else ++wc;
+                }
+            bt[by*BW+bx] = (uint8_t)(wc >= 24 ? 0 : (mc >= wa ? 1 : 2));
+            comp[by*BW+bx] = -1;
+        }
+
+    /* Label walkable-block components (4-connectivity). */
+    int ncomp = 0, *csz = NULL, cszcap = 0;
+    for (int b0 = 0; b0 < NB; ++b0) {
+        if (bt[b0] != 0 || comp[b0] != -1) continue;
+        int qh = 0, qt = 0, sz = 0;
+        comp[b0] = ncomp; q[qt++] = b0;
+        while (qh < qt) {
+            int b = q[qh++]; ++sz;
+            int bx = b % BW, by = b / BW;
+            int nb[4] = { bx>0?b-1:-1, bx<BW-1?b+1:-1, by>0?b-BW:-1, by<BH-1?b+BW:-1 };
+            for (int k = 0; k < 4; ++k)
+                if (nb[k] >= 0 && bt[nb[k]] == 0 && comp[nb[k]] == -1) {
+                    comp[nb[k]] = ncomp; q[qt++] = nb[k];
+                }
+        }
+        if (ncomp == cszcap) { int nc = cszcap ? cszcap*2 : 64;
+            int *t = (int *)realloc(csz, (size_t)nc*sizeof(int)); if (t){csz=t;cszcap=nc;} }
+        if (ncomp < cszcap) csz[ncomp] = sz;
+        ++ncomp;
+    }
+    if (ncomp <= 1) { free(bt); free(comp); free(q); free(csz); return; }
+
+    int main_c = 0;
+    for (int c = 1; c < ncomp; ++c) if (csz[c] > csz[main_c]) main_c = c;
+
+    /* Dial's multi-source Dijkstra from the mainland over barrier blocks. */
+    int *dist = (int *)malloc((size_t)NB*sizeof(int));
+    int *prev = (int *)malloc((size_t)NB*sizeof(int));
+    int *nxt  = (int *)malloc((size_t)NB*sizeof(int));
+    int *head = (int *)malloc((size_t)(MAXC+2)*sizeof(int));
+    if (!dist || !prev || !nxt || !head) {
+        free(bt); free(comp); free(q); free(csz);
+        free(dist); free(prev); free(nxt); free(head);
+        fprintf(stderr, "warning: connect skipped (out of memory)\n"); return;
+    }
+    for (int b = 0; b < NB; ++b) { dist[b] = INT_MAX; prev[b] = -1; }
+    for (int d = 0; d <= MAXC+1; ++d) head[d] = -1;
+    for (int b = 0; b < NB; ++b)
+        if (comp[b] == main_c) { dist[b] = 0; nxt[b] = head[0]; head[0] = b; }
+
+    for (int d = 0; d <= MAXC; ++d) {
+        for (int b = head[d]; b != -1; b = nxt[b]) {
+            if (dist[b] != d) continue;              /* stale */
+            int bx = b % BW, by = b / BW;
+            int nb[4] = { bx>0?b-1:-1, bx<BW-1?b+1:-1, by>0?b-BW:-1, by<BH-1?b+BW:-1 };
+            for (int k = 0; k < 4; ++k) {
+                int v = nb[k]; if (v < 0) continue;
+                int cost = bt[v] == 0 ? CW : (bt[v] == 1 ? CM : CWAT);
+                int nd = d + cost;
+                if (nd <= MAXC && nd < dist[v]) {
+                    dist[v] = nd; prev[v] = b; nxt[v] = head[nd]; head[nd] = v;
+                }
+            }
+        }
+    }
+
+    /* Cheapest approach of each non-main region to the mainland. */
+    int *bd = (int *)malloc((size_t)ncomp*sizeof(int));
+    int *bb = (int *)malloc((size_t)ncomp*sizeof(int));
+    for (int c = 0; c < ncomp; ++c) { bd[c] = INT_MAX; bb[c] = -1; }
+    for (int b = 0; b < NB; ++b) {
+        int c = comp[b];
+        if (c < 0 || c == main_c) continue;
+        if (dist[b] < bd[c]) { bd[c] = dist[b]; bb[c] = b; }
+    }
+
+    long connected = 0, skipped = 0, carved = 0;
+    for (int c = 0; c < ncomp; ++c) {
+        if (c == main_c) continue;
+        if (bb[c] < 0 || bd[c] > MAXC) { ++skipped; continue; }
+        int pl = 0;
+        for (int b = bb[c]; b != -1; b = prev[b]) q[pl++] = b;   /* path blocks */
+        if (pl < 1) continue;
+        int zc = block_walk_z(g, q[0] % BW, q[0] / BW);
+        int zm = block_walk_z(g, q[pl-1] % BW, q[pl-1] / BW);
+        for (int k = 0; k < pl; ++k) {
+            int b = q[k];
+            if (bt[b] == 0) continue;                /* already walkable */
+            double f = (pl > 1) ? (double)k / (double)(pl - 1) : 0.0;
+            int zz = zc + (int)lround((zm - zc) * f);
+            int bx = b % BW, by = b / BW;
+            for (int cy = 0; cy < 8; ++cy)
+                for (int cx = 0; cx < 8; ++cx) {
+                    size_t i = (size_t)(bx*8+cx) + (size_t)(by*8+cy)*W;
+                    int cc = g->cat[i];
+                    if (cc == TCAT_MOUNTAIN) {
+                        g->cat[i] = (uint8_t)TCAT_HILL;
+                        g->id[i]  = tile_for_cat(TCAT_HILL);
+                        g->z[i]   = (int8_t)clampi(zz, -128, 127);
+                    } else if (IS_WATER_CAT(cc)) {
+                        int wz = zz > cfg->water_z + 1 ? zz : cfg->water_z + 1;
+                        g->cat[i] = (uint8_t)TCAT_BRIDGE;
+                        g->id[i]  = TILE_SAND;
+                        g->z[i]   = (int8_t)clampi(wz, -128, 127);
+                    }
+                }
+            ++carved;
+        }
+        ++connected;
+    }
+    fprintf(stderr, "connect: %d regions, %ld linked, %ld left isolated, %ld blocks carved\n",
+            ncomp, connected, skipped, carved);
+
+    free(bt); free(comp); free(q); free(csz);
+    free(dist); free(prev); free(nxt); free(head); free(bd); free(bb);
+}
+
+/*
+ * Clearings: reserve flat, vegetation-free building plots. Poisson-disc centres
+ * on grass/forest land; each plot is cleared to flat grass with a TGRID_FLAG_CLEARED
+ * mark so the statics writer places no trees/rocks there -- obvious house ground.
+ * Deterministic (Poisson keyed by NOISE_LAYER_CLEARING). Gated by `clearings`.
+ */
+static void clearings_pass(terrain_grid *g, const mapgen_config *cfg) {
+    const int W = g->width, H = g->height;
+    const size_t n = (size_t)W * (size_t)H;
+    if (!g->flags) {
+        g->flags = (uint8_t *)calloc(n, 1);
+        if (!g->flags) { fprintf(stderr, "warning: clearings skipped (oom)\n"); return; }
+    }
+    uint8_t *allow = (uint8_t *)malloc(n);
+    const int MAXP = 16384;
+    int *cx = (int *)malloc((size_t)MAXP * sizeof(int));
+    int *cy = (int *)malloc((size_t)MAXP * sizeof(int));
+    if (!allow || !cx || !cy) { free(allow); free(cx); free(cy);
+        fprintf(stderr, "warning: clearings skipped (oom)\n"); return; }
+    for (size_t i = 0; i < n; ++i) {
+        int c = g->cat[i];
+        allow[i] = (uint8_t)((c == TCAT_GRASS || c == TCAT_FOREST) ? 1 : 0);
+    }
+    int sp = cfg->clearing_spacing > 8 ? cfg->clearing_spacing : 8;
+    int R  = cfg->clearing_size > 1 ? cfg->clearing_size : 2;
+    int np = poisson_sample(W, H, (double)sp, allow, 30, cfg->seed,
+                            NOISE_LAYER_CLEARING, cx, cy, MAXP);
+    long cells = 0;
+    for (int k = 0; k < np; ++k) {
+        int z0 = g->z[(size_t)cx[k] + (size_t)cy[k] * W];
+        for (int dy = -R; dy <= R; ++dy)
+            for (int dx = -R; dx <= R; ++dx) {
+                if (dx*dx + dy*dy > R*R) continue;
+                int nx = cx[k] + dx, ny = cy[k] + dy;
+                if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+                size_t i = (size_t)nx + (size_t)ny * W;
+                int c = g->cat[i];
+                if (c != TCAT_GRASS && c != TCAT_FOREST) continue;
+                g->cat[i] = (uint8_t)TCAT_GRASS;
+                g->id[i]  = biome_tile(TCAT_GRASS, cell_hash(cfg->seed, nx, ny, NOISE_LAYER_BIOME));
+                g->z[i]   = (int8_t)z0;             /* flat plot */
+                g->flags[i] |= TGRID_FLAG_CLEARED;  /* no vegetation here */
+                ++cells;
+            }
+    }
+    fprintf(stderr, "clearings: %d plots, %ld cells cleared for building\n", np, cells);
+    free(allow); free(cx); free(cy);
+}
+
 int terrain_generate(terrain_grid *g, const mapgen_config *cfg,
                      const tiledata_land *td, struct preview_ctx *pv) {
     const int W = cfg->width, H = cfg->height;
@@ -1507,6 +1716,12 @@ int terrain_generate(terrain_grid *g, const mapgen_config *cfg,
         preview_pass(pv, g, "calib_terrace_britannia-plateaus");
     }
 
+    /* Connectivity: carve passes/bridges so no land is cut off. */
+    if (cfg->connect) {
+        connect_pass(g, cfg);
+        preview_pass(pv, g, "connect_passes-and-bridges");
+    }
+
     /* Pixel-authentic cliff-face mountains (varied rock + cliff-base statics). */
     if (cfg->cliffs) {
         cliffs_pass(g, cfg);
@@ -1524,6 +1739,12 @@ int terrain_generate(terrain_grid *g, const mapgen_config *cfg,
     if (cfg->resources) {
         resources_pass(g, cfg);
         preview_pass(pv, g, "phase6_resources_poisson-ore-nodes");
+    }
+
+    /* Reserved flat, vegetation-free building plots. */
+    if (cfg->clearings) {
+        clearings_pass(g, cfg);
+        preview_pass(pv, g, "clearings_building-plots");
     }
 
     noise_layer_free(elev); noise_layer_free(moist);

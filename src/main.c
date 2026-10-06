@@ -70,6 +70,11 @@ enum {
     OPT_TERRACE,
     OPT_TERRACE_STEP,
     OPT_PLAIN_Z,
+    OPT_CONNECT,
+    OPT_CONNECT_MAX,
+    OPT_CLEARINGS,
+    OPT_CLEARING_SPACING,
+    OPT_CLEARING_SIZE,
     OPT_PASS_PREVIEWS,
     OPT_PASS_PREVIEW_DIR,
     OPT_INSTALL_DIR,
@@ -158,6 +163,13 @@ static void print_help(const char *argv0) {
 "  --terrace                 Flatten land into Britannia-like plateaus (vs noise).\n"
 "  --terrace-step <n>        Terrace z quantization step (default 5).\n"
 "  --plain-z <n>             Land within +/-n of 0 snaps flat to 0 (default 3).\n"
+"  --connect                 Carve passes/bridges so no land is cut off by\n"
+"                            mountains or water.\n"
+"  --connect-max <n>         Max barrier-crossing cost; higher bridges wider gaps\n"
+"                            (default 2000; keeps oceans between continents).\n"
+"  --clearings               Reserve flat, vegetation-free building plots.\n"
+"  --clearing-spacing <n>    Min distance between clearings (default 140).\n"
+"  --clearing-size <n>       Clearing radius in tiles (default 10).\n"
 "  Enrichment (all ON by default; use the --no-* flags to disable):\n"
 "  --no-biomes               Disable climate biomes (snow/desert/jungle/swamp).\n"
 "  --temperature-bias <f>    Shift climate warmer(+)/colder(-) (default 0).\n"
@@ -290,6 +302,11 @@ int main(int argc, char **argv) {
         { "terrace",           no_argument,       0, OPT_TERRACE },
         { "terrace-step",      required_argument, 0, OPT_TERRACE_STEP },
         { "plain-z",           required_argument, 0, OPT_PLAIN_Z },
+        { "connect",           no_argument,       0, OPT_CONNECT },
+        { "connect-max",       required_argument, 0, OPT_CONNECT_MAX },
+        { "clearings",         no_argument,       0, OPT_CLEARINGS },
+        { "clearing-spacing",  required_argument, 0, OPT_CLEARING_SPACING },
+        { "clearing-size",     required_argument, 0, OPT_CLEARING_SIZE },
         { "tiledata",    required_argument, 0, 'T' },
         { "preview",     required_argument, 0, 'P' },
         { "pass-previews",    no_argument,       0, OPT_PASS_PREVIEWS },
@@ -371,6 +388,11 @@ int main(int argc, char **argv) {
             case OPT_TERRACE:      cfg.terrace = 1; break;
             case OPT_TERRACE_STEP: cfg.terrace = 1; cfg.terrace_step = (int)strtol(optarg, NULL, 0); break;
             case OPT_PLAIN_Z:      cfg.terrace = 1; cfg.plain_z = (int)strtol(optarg, NULL, 0); break;
+            case OPT_CONNECT:      cfg.connect = 1; break;
+            case OPT_CONNECT_MAX:  cfg.connect = 1; cfg.connect_max = (int)strtol(optarg, NULL, 0); break;
+            case OPT_CLEARINGS:    cfg.clearings = 1; break;
+            case OPT_CLEARING_SPACING: cfg.clearings = 1; cfg.clearing_spacing = (int)strtol(optarg, NULL, 0); break;
+            case OPT_CLEARING_SIZE:    cfg.clearings = 1; cfg.clearing_size = (int)strtol(optarg, NULL, 0); break;
             case 'T': snprintf(cfg.tiledata_path, sizeof(cfg.tiledata_path), "%s", optarg); break;
             case 'P': snprintf(cfg.preview_path, sizeof(cfg.preview_path), "%s", optarg); break;
             case OPT_PASS_PREVIEWS: cfg.emit_pass_previews = 1; break;
@@ -395,14 +417,15 @@ int main(int argc, char **argv) {
     if (config_validate(&cfg) != 0)
         return 2;
 
-    /* Write the fully-resolved config if requested (reflects preset + file + CLI). */
-    if (config_dump(&cfg, cfg.dump_config_path) != 0)
-        return 1;
-
     if (io_ensure_dir(cfg.out_dir) != 0) {
         fprintf(stderr, "error: cannot create output directory '%s'\n", cfg.out_dir);
         return 1;
     }
+
+    /* Write the fully-resolved config if requested (after the out dir exists, so
+     * --dump-config ./out/world.cfg works; reflects preset + file + CLI). */
+    if (config_dump(&cfg, cfg.dump_config_path) != 0)
+        return 1;
 
     const int BW = cfg.width >> 3, BH = cfg.height >> 3;
     printf("uomappp %s: seed=%llu map=%d size=%dx%d (%dx%d blocks) out=%s\n",
