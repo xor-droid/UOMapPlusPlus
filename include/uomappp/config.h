@@ -65,6 +65,10 @@ typedef struct {
     int      cellular;      /* bool: cellular-automata forest clumping */
     double   cellular_fill;      /* [0,1] forest random-fill probability */
     int      cellular_iterations;/* CA smoothing iterations */
+    int      towns;         /* bool: towns + roads/bridges + buildings */
+    int      town_spacing;       /* min distance between towns (Poisson radius) */
+    int      town_size;          /* town footprint size in tiles */
+    int      trails;             /* bool: L-system side-trails from towns */
     int      emit_mapdef;   /* bool: also write map-definitions.snippet.json */
     int      terrain_only;  /* bool: write only mapN.mul (skip statics) */
     int      emit_pass_previews; /* bool: write a PNG snapshot after each pass */

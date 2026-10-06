@@ -109,6 +109,19 @@ out/                      generated output (NOT committed)
                neighbours meet only along **legal transitions** (grass is the
                universal glue). Salt `NOISE_LAYER_WFC`; falls back to climate
                biomes on contradiction.
+- `poisson`  — **Poisson-disc sampling** (Bridson): blue-noise points with a
+               minimum spacing, for town sites. Salt `NOISE_LAYER_POISSON`.
+- `astar`    — **A\*** on an 8-connected cost grid (binary heap, `(f,seq)`
+               tie-break), for routing roads. No RNG.
+- `bsp`      — **BSP** recursive rectangle partition, for town building
+               footprints / dungeon rooms. Salt `NOISE_LAYER_BSP`.
+- `lsystem`  — **L-system** branching turtle (F→F[+F][-F]-style), for organic
+               side-trails. Salt `NOISE_LAYER_LSYSTEM`.
+               The `towns` terrain pass (off by default, runs last) ties these
+               together: Poisson town sites on buildable land → MST → A* roads
+               (bridging rivers) → BSP buildings + street grid → L-system trails.
+               Rendered at the terrain-tile level (TCAT_ROAD/BRIDGE/FLOOR/WALL);
+               real statics walls are a follow-up on the statics pipeline.
 - `tiledata` — reads the land section of `tiledata.mul` (High Seas format) to
                sanity-check palette tile flags (Wet / Impassable). Optional.
 - `biome`    — climate-band biome classification (temperature-by-latitude +
@@ -225,9 +238,12 @@ in a fixed order by the pipeline orchestrator, each emitting a per-pass PNG:
    automata forest clumps (`cellular` module, salt `0x0B`). Both off by default
    → byte-identical; deterministic when on (full-stack sha256 gate). (Swamps/
    caves/ruins reuse the same `cellular`/`wfc` modules in later work.)
-7. ⬜ **Phase 5 — Civilization:** town placement (Poisson-disc within Voronoi
-   territories + MST); roads/trails/bridges (A\* + L-systems); BSP
-   dungeons/building interiors (statics).
+7. ✅ **Phase 5 — Civilization:** towns (`poisson` sites, salt `0x0D`) + MST +
+   `astar` roads/bridges + `bsp` building footprints (salt `0x0F`) + `lsystem`
+   trails (salt `0x0E`), via the `towns` pass. Off by default → byte-identical;
+   deterministic when on. Rendered as terrain tiles; **follow-up:** render
+   building walls as real statics (extend `statics.c`/`vegetation.c` record
+   pipeline).
 8. ⬜ **Phase 6 — Detail:** Poisson-disc resource/vegetation placement;
    **Voronoi boundary noise-warp** (displace region/biome borders with a noise
    field so territories read organically instead of polygonal); biome-border

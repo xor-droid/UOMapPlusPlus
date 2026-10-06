@@ -8,6 +8,10 @@
 #include "uomappp/mst.h"
 #include "uomappp/cellular.h"
 #include "uomappp/wfc.h"
+#include "uomappp/poisson.h"
+#include "uomappp/astar.h"
+#include "uomappp/bsp.h"
+#include "uomappp/lsystem.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -832,6 +836,203 @@ static void cellular_pass(terrain_grid *g, const mapgen_config *cfg) {
     free(domain); free(mask);
 }
 
+/* --- Phase 5: towns, roads, bridges, trails, buildings -------------------- */
+
+/* Civilization tiles (validated classic land tile ids reused as crude town
+ * terrain; real statics walls are a follow-up on the statics pipeline). */
+#define TILE_TOWN_ROAD   0x0071  /* dirt road / trail */
+#define TILE_TOWN_BRIDGE 0x0016  /* river crossing (packed earth) */
+#define TILE_TOWN_FLOOR  0x0016  /* building floor */
+#define TILE_TOWN_WALL   0x00E4  /* building wall (rock) */
+
+#define TOWN_MAX 1024
+
+/* Walkable land a road or building may occupy (not open sea or mountain, and
+ * rivers/lakes only as bridges). */
+static int town_buildable(int c) {
+    return !(c == TCAT_WATER_DEEP || c == TCAT_WATER_SHALLOW ||
+             c == TCAT_RIVER || c == TCAT_LAKE || c == TCAT_MOUNTAIN);
+}
+
+static void paint_road_cell(terrain_grid *g, int i) {
+    int c = g->cat[i];
+    if (c == TCAT_WATER_DEEP || c == TCAT_WATER_SHALLOW || c == TCAT_MOUNTAIN)
+        return;                               /* A* should never step here */
+    if (c == TCAT_RIVER || c == TCAT_LAKE) {
+        g->cat[i] = (uint8_t)TCAT_BRIDGE;
+        g->id[i]  = TILE_TOWN_BRIDGE;
+    } else if (c != TCAT_FLOOR && c != TCAT_WALL) {
+        g->cat[i] = (uint8_t)TCAT_ROAD;
+        g->id[i]  = TILE_TOWN_ROAD;
+    }
+}
+
+/*
+ * Towns pass (runs last, after slope-limit): Poisson-disc town sites on
+ * buildable land, an MST over them, A* roads (bridging rivers) along the tree,
+ * BSP building footprints + street grid at each town, and L-system side-trails.
+ * Deterministic (Poisson/BSP/L-system each keyed by their salts). Terrain-level
+ * (cat/id) only; byte-safe behind the `towns` toggle.
+ */
+static void towns_pass(terrain_grid *g, const mapgen_config *cfg) {
+    const int W = g->width, H = g->height;
+    const size_t n = (size_t)W * (size_t)H;
+    const int margin = 8;
+
+    /* Eligibility: buildable, not too high (avoid clifftops), off the edge. */
+    uint8_t *allow = (uint8_t *)malloc(n);
+    float   *cost  = (float *)malloc(n * sizeof(float));
+    int     *path  = (int *)malloc(n * sizeof(int));
+    int     *tx = (int *)malloc(TOWN_MAX * sizeof(int));
+    int     *ty = (int *)malloc(TOWN_MAX * sizeof(int));
+    if (!allow || !cost || !path || !tx || !ty) {
+        free(allow); free(cost); free(path); free(tx); free(ty);
+        fprintf(stderr, "warning: towns skipped (out of memory)\n");
+        return;
+    }
+
+    const int zhi = (cfg->land_z_max > 0) ? (cfg->land_z_max * 3) / 5 : 127;
+    for (int y = 0; y < H; ++y)
+        for (int x = 0; x < W; ++x) {
+            size_t i = (size_t)x + (size_t)y * W;
+            int c = g->cat[i];
+            int ok = town_buildable(c) && c != TCAT_RIVER && c != TCAT_LAKE &&
+                     g->z[i] <= zhi &&
+                     x >= margin && y >= margin && x < W - margin && y < H - margin;
+            allow[i] = (uint8_t)(ok ? 1 : 0);
+
+            /* A* cost: impassable sea/mountain; bridge rivers/lakes; prefer flat
+             * open ground, penalise forest/swamp/hills and elevation. */
+            if (c == TCAT_WATER_DEEP || c == TCAT_WATER_SHALLOW || c == TCAT_MOUNTAIN)
+                cost[i] = -1.0f;
+            else if (c == TCAT_RIVER || c == TCAT_LAKE)
+                cost[i] = 40.0f;                        /* bridge premium */
+            else {
+                float cc = 1.0f + 0.06f * (float)g->z[i];
+                if (c == TCAT_HILL)   cc += 3.0f;
+                if (c == TCAT_FOREST || c == TCAT_JUNGLE) cc += 1.5f;
+                if (c == TCAT_SWAMP)  cc += 4.0f;
+                cost[i] = cc;
+            }
+        }
+
+    int spacing = cfg->town_spacing > 8 ? cfg->town_spacing : 8;
+    int nt = poisson_sample(W, H, (double)spacing, allow, 30,
+                            cfg->seed, NOISE_LAYER_POISSON, tx, ty, TOWN_MAX);
+
+    /* MST over the towns (complete Euclidean graph -> tree). */
+    long roads = 0, bridges = 0;
+    if (nt >= 2) {
+        int cap = nt * (nt - 1) / 2;
+        mst_edge *edges = (mst_edge *)malloc((size_t)cap * sizeof(mst_edge));
+        mst_edge *tree  = (mst_edge *)malloc((size_t)nt * sizeof(mst_edge));
+        if (edges && tree) {
+            int ne = 0;
+            for (int a = 0; a < nt; ++a)
+                for (int b = a + 1; b < nt; ++b) {
+                    double dx = tx[a] - tx[b], dy = ty[a] - ty[b];
+                    edges[ne].a = a; edges[ne].b = b;
+                    edges[ne].w = sqrt(dx * dx + dy * dy);
+                    ++ne;
+                }
+            int k = mst_build(edges, ne, nt, tree);
+            for (int e = 0; e < k; ++e) {
+                int a = tree[e].a, b = tree[e].b;
+                int start = tx[a] + ty[a] * W, goal = tx[b] + ty[b] * W;
+                int len = astar_path(W, H, cost, start, goal, path, (int)n);
+                if (len <= 0) continue;
+                for (int p = 0; p < len; ++p) {
+                    int ci = path[p];
+                    if (g->cat[ci] == TCAT_RIVER || g->cat[ci] == TCAT_LAKE) ++bridges;
+                    else ++roads;
+                    paint_road_cell(g, ci);
+                    cost[ci] = 0.3f;              /* reuse roads in later edges */
+                }
+            }
+        }
+        free(edges); free(tree);
+    }
+
+    /* Town layout: plaza + BSP buildings + radiating L-system trails. */
+    const int tsize = cfg->town_size > 12 ? cfg->town_size : 12;
+    bsp_rect leaves[256];
+    long buildings = 0, trailCells = 0;
+    int *trail = path;                              /* reuse the path buffer */
+    for (int t = 0; t < nt; ++t) {
+        int cx = tx[t], cy = ty[t];
+        int rx = cx - tsize / 2, ry = cy - tsize / 2, rw = tsize, rh = tsize;
+        if (rx < margin) rx = margin;
+        if (ry < margin) ry = margin;
+        if (rx + rw > W - margin) rw = W - margin - rx;
+        if (ry + rh > H - margin) rh = H - margin - ry;
+        if (rw < 12 || rh < 12) continue;
+
+        /* Plaza: pave buildable cells in the town rect. */
+        for (int y = ry; y < ry + rh; ++y)
+            for (int x = rx; x < rx + rw; ++x) {
+                size_t i = (size_t)x + (size_t)y * W;
+                if (town_buildable(g->cat[i])) paint_road_cell(g, i);
+            }
+
+        /* Buildings: BSP footprints, inset by 1 so streets remain between them. */
+        int nl = bsp_partition(rx, ry, rw, rh, 8, 5,
+                               cfg->seed, NOISE_LAYER_BSP + (uint32_t)t,
+                               leaves, 256);
+        for (int l = 0; l < nl; ++l) {
+            int bx = leaves[l].x + 1, by = leaves[l].y + 1;
+            int bw = leaves[l].w - 2, bh = leaves[l].h - 2;
+            if (bw < 3 || bh < 3) continue;
+            int anyFloor = 0;
+            for (int y = by; y < by + bh; ++y)
+                for (int x = bx; x < bx + bw; ++x) {
+                    size_t i = (size_t)x + (size_t)y * W;
+                    int c = g->cat[i];
+                    if (!(c == TCAT_ROAD || c == TCAT_FLOOR || c == TCAT_WALL))
+                        continue;                 /* build only on the paved plaza */
+                    int border = (x == bx || x == bx + bw - 1 ||
+                                  y == by || y == by + bh - 1);
+                    g->cat[i] = (uint8_t)(border ? TCAT_WALL : TCAT_FLOOR);
+                    g->id[i]  = border ? TILE_TOWN_WALL : TILE_TOWN_FLOOR;
+                    if (!border) anyFloor = 1;
+                }
+            /* Punch a door in the south wall. */
+            int doorx = bx + bw / 2, doory = by + bh - 1;
+            if (anyFloor && doorx >= 0 && doory >= 0 && doorx < W && doory < H) {
+                size_t di = (size_t)doorx + (size_t)doory * W;
+                g->cat[di] = (uint8_t)TCAT_FLOOR;
+                g->id[di]  = TILE_TOWN_FLOOR;
+            }
+            ++buildings;
+        }
+
+        /* L-system trails radiating from the town centre. */
+        if (cfg->trails) {
+            for (int b = 0; b < 3; ++b) {
+                double ang = (6.2831853 / 3.0) * b
+                           + (double)((cfg->seed >> (b * 4)) & 7) * 0.1;
+                int m = lsystem_trail(W, H, cx, cy, ang, (double)spacing * 0.25,
+                                      0.5, 3, cfg->seed,
+                                      NOISE_LAYER_LSYSTEM + (uint32_t)t,
+                                      trail, (int)n);
+                for (int p = 0; p < m; ++p) {
+                    int ci = trail[p];
+                    if (town_buildable(g->cat[ci]) &&
+                        g->cat[ci] != TCAT_FLOOR && g->cat[ci] != TCAT_WALL) {
+                        paint_road_cell(g, ci);
+                        ++trailCells;
+                    }
+                }
+            }
+        }
+    }
+
+    fprintf(stderr,
+        "towns: %d towns, %ld road + %ld bridge cells, %ld buildings, %ld trail cells\n",
+        nt, roads, bridges, buildings, trailCells);
+
+    free(allow); free(cost); free(path); free(tx); free(ty);
+}
+
 int terrain_generate(terrain_grid *g, const mapgen_config *cfg,
                      const tiledata_land *td, struct preview_ctx *pv) {
     const int W = cfg->width, H = cfg->height;
@@ -1089,6 +1290,13 @@ int terrain_generate(terrain_grid *g, const mapgen_config *cfg,
     if (!cfg->flat) {
         limit_slope(g, cfg);
         preview_pass(pv, g, "base_slope-limit");
+    }
+
+    /* Civilization: towns, roads/bridges, buildings, trails (runs last so the
+     * slope-limiter doesn't flatten roads). */
+    if (cfg->towns) {
+        towns_pass(g, cfg);
+        preview_pass(pv, g, "phase5_towns_roads-bridges-buildings");
     }
 
     noise_layer_free(elev); noise_layer_free(moist);

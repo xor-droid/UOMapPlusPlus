@@ -27,6 +27,11 @@ enum {
     TCAT_SWAMP,
     TCAT_SNOW,
     TCAT_LAKE,
+    /* --- appended for UOMapPlusPlus civilization pass (preview only) --- */
+    TCAT_ROAD,          /* dirt/cobble road + trails */
+    TCAT_BRIDGE,        /* road crossing a river */
+    TCAT_FLOOR,         /* building floor */
+    TCAT_WALL,          /* building wall */
     TCAT_COUNT
 };
 

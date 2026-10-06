@@ -56,6 +56,10 @@ enum {
     OPT_CELLULAR,
     OPT_CELLULAR_FILL,
     OPT_CELLULAR_ITERS,
+    OPT_TOWNS,
+    OPT_TOWN_SPACING,
+    OPT_TOWN_SIZE,
+    OPT_NO_TRAILS,
     OPT_PASS_PREVIEWS,
     OPT_PASS_PREVIEW_DIR,
     OPT_INSTALL_DIR
@@ -123,6 +127,11 @@ static void print_help(const char *argv0) {
 "  --cellular                Cellular-automata organic forest clumps.\n"
 "  --cellular-fill <f>       Forest random-fill probability, [0,1] (default 0.42).\n"
 "  --cellular-iterations <n> CA smoothing iterations (default 4).\n"
+"  Towns (off by default; Poisson sites, MST roads, A* paths, BSP buildings):\n"
+"  --towns                   Place towns + roads/bridges + buildings + trails.\n"
+"  --town-spacing <n>        Min distance between towns in tiles (default 160).\n"
+"  --town-size <n>           Town footprint size in tiles (default 48).\n"
+"  --no-trails               Skip the L-system side-trails from towns.\n"
 "  Enrichment (all ON by default; use the --no-* flags to disable):\n"
 "  --no-biomes               Disable climate biomes (snow/desert/jungle/swamp).\n"
 "  --temperature-bias <f>    Shift climate warmer(+)/colder(-) (default 0).\n"
@@ -239,6 +248,10 @@ int main(int argc, char **argv) {
         { "cellular",          no_argument,       0, OPT_CELLULAR },
         { "cellular-fill",     required_argument, 0, OPT_CELLULAR_FILL },
         { "cellular-iterations", required_argument, 0, OPT_CELLULAR_ITERS },
+        { "towns",             no_argument,       0, OPT_TOWNS },
+        { "town-spacing",      required_argument, 0, OPT_TOWN_SPACING },
+        { "town-size",         required_argument, 0, OPT_TOWN_SIZE },
+        { "no-trails",         no_argument,       0, OPT_NO_TRAILS },
         { "tiledata",    required_argument, 0, 'T' },
         { "preview",     required_argument, 0, 'P' },
         { "pass-previews",    no_argument,       0, OPT_PASS_PREVIEWS },
@@ -305,6 +318,10 @@ int main(int argc, char **argv) {
             case OPT_CELLULAR:       cfg.cellular = 1; break;
             case OPT_CELLULAR_FILL:  cfg.cellular = 1; cfg.cellular_fill = strtod(optarg, NULL); break;
             case OPT_CELLULAR_ITERS: cfg.cellular = 1; cfg.cellular_iterations = (int)strtol(optarg, NULL, 0); break;
+            case OPT_TOWNS:        cfg.towns = 1; break;
+            case OPT_TOWN_SPACING: cfg.towns = 1; cfg.town_spacing = (int)strtol(optarg, NULL, 0); break;
+            case OPT_TOWN_SIZE:    cfg.towns = 1; cfg.town_size = (int)strtol(optarg, NULL, 0); break;
+            case OPT_NO_TRAILS:    cfg.trails = 0; break;
             case 'T': snprintf(cfg.tiledata_path, sizeof(cfg.tiledata_path), "%s", optarg); break;
             case 'P': snprintf(cfg.preview_path, sizeof(cfg.preview_path), "%s", optarg); break;
             case OPT_PASS_PREVIEWS: cfg.emit_pass_previews = 1; break;

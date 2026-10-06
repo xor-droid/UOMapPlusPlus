@@ -42,6 +42,10 @@ add_executable(uomappp
   src/mst.c
   src/cellular.c
   src/wfc.c
+  src/poisson.c
+  src/astar.c
+  src/bsp.c
+  src/lsystem.c
 )
 
 target_include_directories(uomappp PRIVATE

@@ -28,7 +28,11 @@ enum {
     NOISE_LAYER_EROSION   = 0x09,  /* hydraulic-erosion droplet spawn stream */
     NOISE_LAYER_VORONOI   = 0x0A,  /* Voronoi site jitter + per-region climate */
     NOISE_LAYER_CELLULAR  = 0x0B,  /* cellular-automata random fill (clumps) */
-    NOISE_LAYER_WFC       = 0x0C   /* wave-function-collapse collapse choices */
+    NOISE_LAYER_WFC       = 0x0C,  /* wave-function-collapse collapse choices */
+    NOISE_LAYER_POISSON   = 0x0D,  /* Poisson-disc sampling (town sites) */
+    NOISE_LAYER_LSYSTEM   = 0x0E,  /* L-system trail branching */
+    NOISE_LAYER_BSP       = 0x0F,  /* BSP partition split choices */
+    NOISE_LAYER_TOWN      = 0x10   /* town-pass misc jitter */
 };
 
 /* splitmix64: fixed, portable 64-bit mixer used for seed derivation. */

@@ -23,6 +23,10 @@ static const rgb CAT_COLOR[TCAT_COUNT] = {
     [TCAT_SWAMP]         = {  80,  90,  60 },
     [TCAT_SNOW]          = { 235, 240, 245 },
     [TCAT_LAKE]          = {  80, 140, 215 },
+    [TCAT_ROAD]          = { 150, 120,  85 },
+    [TCAT_BRIDGE]        = { 160, 110,  70 },
+    [TCAT_FLOOR]         = { 190, 170, 140 },
+    [TCAT_WALL]          = {  90,  80,  75 },
 };
 
 static unsigned char clampu8(int v) {
