@@ -73,7 +73,7 @@ void config_defaults(mapgen_config *cfg) {
     cfg->terrace_step       = 5;
     cfg->plain_z            = 3;
     cfg->connect            = 0;
-    cfg->causeways          = 1;     /* connect may bridge the sea; --no-causeways = keep islands, still bridge rivers */
+    cfg->causeways          = 0;     /* default: keep islands (no sea causeways); --causeways to bridge the open sea */
     cfg->connect_max        = 6000;  /* cost budget: mountains/inland water bridge generously, open ocean does not */
     cfg->pass_width         = 10;    /* ~20-tile-wide grassy valleys, not 1-tile scars */
     cfg->pass_slope         = 8;     /* foothill band grading mountain rock down to the valley */

@@ -78,6 +78,7 @@ enum {
     OPT_PLAIN_Z,
     OPT_CONNECT,
     OPT_NO_CAUSEWAYS,
+    OPT_CAUSEWAYS,
     OPT_CONNECT_MAX,
     OPT_PASS_WIDTH,
     OPT_PASS_SLOPE,
@@ -180,11 +181,14 @@ static void print_help(const char *argv0) {
 "  --terrace                 Flatten land into Britannia-like plateaus (vs noise).\n"
 "  --terrace-step <n>        Terrace z quantization step (default 5).\n"
 "  --plain-z <n>             Land within +/-n of 0 snaps flat to 0 (default 3).\n"
-"  --connect                 Carve passes/bridges so no land is cut off by\n"
-"                            mountains or water.\n"
-"  --no-causeways            With --connect, never bridge the open sea (keeps\n"
-"                            islands separate); still carves mountain passes and\n"
-"                            bridges rivers/inland water on a mainland.\n"
+"  --connect                 Carve passes/bridges so no land is cut off within a\n"
+"                            landmass (mountain passes + river bridges; the open\n"
+"                            sea is not bridged unless --causeways).\n"
+"  --no-causeways            (default) With --connect, never bridge the open sea\n"
+"                            (keeps islands separate); still carves mountain passes\n"
+"                            and bridges rivers/inland water on a mainland.\n"
+"  --causeways               With --connect, also bridge the open sea with sand\n"
+"                            causeways (joins near-islands across narrow straits).\n"
 "  --connect-max <n>         Max barrier-crossing cost; higher bridges wider gaps\n"
 "                            (default 6000; keeps the open ocean between continents).\n"
 "  --pass-width <n>          Half-width of carved passes/causeways; bigger = wider\n"
@@ -351,6 +355,7 @@ int main(int argc, char **argv) {
         { "plain-z",           required_argument, 0, OPT_PLAIN_Z },
         { "connect",           no_argument,       0, OPT_CONNECT },
         { "no-causeways",      no_argument,       0, OPT_NO_CAUSEWAYS },
+        { "causeways",         no_argument,       0, OPT_CAUSEWAYS },
         { "connect-max",       required_argument, 0, OPT_CONNECT_MAX },
         { "pass-width",        required_argument, 0, OPT_PASS_WIDTH },
         { "pass-slope",        required_argument, 0, OPT_PASS_SLOPE },
@@ -447,6 +452,7 @@ int main(int argc, char **argv) {
             case OPT_PLAIN_Z:      cfg.terrace = 1; cfg.plain_z = (int)strtol(optarg, NULL, 0); break;
             case OPT_CONNECT:      cfg.connect = 1; break;
             case OPT_NO_CAUSEWAYS: cfg.connect = 1; cfg.causeways = 0; break;
+            case OPT_CAUSEWAYS:    cfg.connect = 1; cfg.causeways = 1; break;
             case OPT_CONNECT_MAX:  cfg.connect = 1; cfg.connect_max = (int)strtol(optarg, NULL, 0); break;
             case OPT_PASS_WIDTH:   cfg.connect = 1; cfg.pass_width = (int)strtol(optarg, NULL, 0); break;
             case OPT_PASS_SLOPE:   cfg.connect = 1; cfg.pass_slope = (int)strtol(optarg, NULL, 0); break;
