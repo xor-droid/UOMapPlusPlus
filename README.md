@@ -118,6 +118,14 @@ transforms) is implemented directly in POSIX C. There are no other dependencies.
 # ranges, coherent biome regions) so it looks and plays like Britannia, not noise
 ./build/uomappp --seed 1337 --preset britannia --out ./out --preview ./out/britannia.png
 
+# Britannia with 3 seed-placed continents, every landmass made reachable
+# (--connect carves grass passes through mountains / causeways over water),
+# every mountain perimeter graded into sloped foothills (--mountain-slope),
+# flat house plots reserved (--clearings), and a reproducible config dumped
+./build/uomappp --seed 1337 --preset britannia --continent-count 3 \
+    --connect --mountain-slope 24 --clearings \
+    --out ./out --preview ./out/world.png --dump-config ./out/world.cfg
+
 # Small test map with a preview image and a ModernUO definition snippet
 ./build/uomappp --seed 42 --preset test --out ./out \
     --preview ./out/preview.png --emit-mapdef
@@ -138,6 +146,7 @@ transforms) is implemented directly in POSIX C. There are no other dependencies.
 
 Run `./build/uomappp --help` for the full, grouped option list (landmass shape,
 elevation/mountains, rivers, erosion, regions, WFC/cellular, towns, detail/polish,
+connectivity (`--connect`/`--pass-*`/`--mountain-slope`), clearings,
 previews/install, and outputs). Keys in the config file mirror the long options
 with `-` or `_`; see [`config/example.cfg`](config/example.cfg).
 

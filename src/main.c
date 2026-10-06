@@ -210,14 +210,29 @@ static void print_help(const char *argv0) {
 "  with '-' or '_' (e.g. sea_level = -0.1). 'preset = felucca' is allowed.\n"
 "\n"
 "Examples:\n"
+"  # Small smoke test: preview + ModernUO map-definitions snippet.\n"
 "  %s --seed 42 --preset test --out ./out --preview out.png --emit-mapdef\n"
+"\n"
+"  # Reproduce a map from a config file (CLI flags still override it).\n"
 "  %s --config config/example.cfg --seed 7\n"
+"\n"
+"  # Drop-in Felucca-sized map0 replacement, written straight to a client dir.\n"
 "  %s --seed 1 --preset felucca --out /mnt/c/.../client --map 0\n"
+"\n"
+"  # Britannia-style world: 3 seed-placed continents, every landmass made\n"
+"  # reachable (--connect), mountain perimeters graded into foothills, flat\n"
+"  # house plots reserved, and a reproducible config dumped alongside it.\n"
+"  %s --seed 1337 --preset britannia --continent-count 3 \\\n"
+"      --connect --mountain-slope 24 --clearings \\\n"
+"      --out ./out --preview ./out/world.png --dump-config ./out/world.cfg\n"
+"\n"
+"  # Same, installed directly into the UOFiddler/ModernUO data dir.\n"
+"  %s --config ./out/world.cfg --install-dir /mnt/c/UONewDawn\n"
 "\n"
 "ModernUO note: the generated map's width/height MUST match the entry in\n"
 "Data/map-definitions.json for that map. Use --emit-mapdef to get a matching\n"
 "snippet, or --preset felucca for a drop-in map0 replacement.\n",
-        UOMG_VERSION, argv0, argv0, argv0, argv0);
+        UOMG_VERSION, argv0, argv0, argv0, argv0, argv0, argv0);
 }
 
 /* Pre-scan argv for --config so the file loads before CLI overrides apply. */
