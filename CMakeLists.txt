@@ -40,6 +40,8 @@ add_executable(uomappp
   src/voronoi.c
   src/marching.c
   src/mst.c
+  src/cellular.c
+  src/wfc.c
 )
 
 target_include_directories(uomappp PRIVATE

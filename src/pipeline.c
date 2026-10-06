@@ -47,7 +47,7 @@ int pipeline_run(const mapgen_config *cfg) {
     /* Final preview: a numbered pass snapshot (when pass previews are on) and/or
      * the explicit --preview path for backward compatibility. */
     if (rc == 0) {
-        preview_pass(&pv, &grid, "final");
+        preview_pass(&pv, &grid, "final_complete-map");
         if (cfg->preview_path[0])
             if (preview_write_png(&grid, cfg->preview_path) != 0) rc = 1;
     }

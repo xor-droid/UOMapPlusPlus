@@ -100,6 +100,15 @@ out/                      generated output (NOT committed)
                The `regions` terrain pass (off by default) ties these together:
                fills `g->region`, gives each territory a climate so biomes become
                organic Voronoi patches, flags borders, and builds the MST.
+- `cellular`  — **cellular-automata** primitives (random fill + birth/survival
+               smoothing). The `cellular` pass grows organic **forest clumps**;
+               reusable for swamps/caves/ruins. Salt `NOISE_LAYER_CELLULAR`.
+- `wfc`      — **Wave Function Collapse** over a graph (min-entropy + weighted
+               collapse + constraint propagation, no backtracking). The `wfc`
+               pass (implies `regions`) assigns each territory a biome so
+               neighbours meet only along **legal transitions** (grass is the
+               universal glue). Salt `NOISE_LAYER_WFC`; falls back to climate
+               biomes on contradiction.
 - `tiledata` — reads the land section of `tiledata.mul` (High Seas format) to
                sanity-check palette tile flags (Wet / Impassable). Optional.
 - `biome`    — climate-band biome classification (temperature-by-latitude +
@@ -211,13 +220,18 @@ in a fixed order by the pipeline orchestrator, each emitting a per-pass PNG:
    organic climate biomes; marching-squares borders (`marching`) → `g->flags`;
    MST territory graph (`mst`). Gated by `regions` (off by default →
    byte-identical; deterministic when on). Allocates `g->region` + `g->flags`.
-6. ⬜ **Phase 4 — Transitions & organic regions:** WFC tile transitions; cellular
-   automata caves/swamps/forest clumps/ruins.
+6. ✅ **Phase 4 — Transitions & organic regions:** WFC biome transitions
+   (`wfc` module, salt `0x0C`; implies regions, legal biome adjacency) + cellular
+   automata forest clumps (`cellular` module, salt `0x0B`). Both off by default
+   → byte-identical; deterministic when on (full-stack sha256 gate). (Swamps/
+   caves/ruins reuse the same `cellular`/`wfc` modules in later work.)
 7. ⬜ **Phase 5 — Civilization:** town placement (Poisson-disc within Voronoi
    territories + MST); roads/trails/bridges (A\* + L-systems); BSP
    dungeons/building interiors (statics).
 8. ⬜ **Phase 6 — Detail:** Poisson-disc resource/vegetation placement;
-   biome-border dithering; pixel-authentic cliff-face mountains; final PNG + swap.
+   **Voronoi boundary noise-warp** (displace region/biome borders with a noise
+   field so territories read organically instead of polygonal); biome-border
+   dithering; pixel-authentic cliff-face mountains; final PNG + swap.
 
 ### Library → pass → seed map
 

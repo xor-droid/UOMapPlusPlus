@@ -6,6 +6,8 @@
 #include "uomappp/voronoi.h"
 #include "uomappp/marching.h"
 #include "uomappp/mst.h"
+#include "uomappp/cellular.h"
+#include "uomappp/wfc.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -643,6 +645,193 @@ static void regions_pass(terrain_grid *g, const mapgen_config *cfg) {
     voronoi_free(&vd);
 }
 
+/* --- Phase 4: WFC biome transitions + cellular forest clumps -------------- */
+
+/* WFC biome classes and their TCAT mapping. */
+enum { WC_GRASS = 0, WC_FOREST, WC_DESERT, WC_JUNGLE, WC_SWAMP, WC_SNOW, WC_N };
+static const int WC_TCAT[WC_N] = {
+    TCAT_GRASS, TCAT_FOREST, TCAT_DESERT, TCAT_JUNGLE, TCAT_SWAMP, TCAT_SNOW
+};
+static int tcat_to_class(int c) {
+    switch (c) {
+        case TCAT_FOREST: return WC_FOREST;
+        case TCAT_DESERT: return WC_DESERT;
+        case TCAT_JUNGLE: return WC_JUNGLE;
+        case TCAT_SWAMP:  return WC_SWAMP;
+        case TCAT_SNOW:   return WC_SNOW;
+        default:          return WC_GRASS;
+    }
+}
+
+/*
+ * WFC pass: assign each Voronoi territory a biome so neighbouring territories
+ * only meet along legal transitions (GRASS is the universal glue; e.g. desert
+ * never directly touches snow). Each region prefers its climate biome (high
+ * weight) but WFC inserts transition biomes where adjacency forbids a direct
+ * meeting. Requires the region map from the regions pass; on a WFC contradiction
+ * the climate biomes are kept unchanged.
+ */
+static void wfc_pass(terrain_grid *g, const mapgen_config *cfg) {
+    const int W = g->width, H = g->height;
+    const size_t n = (size_t)W * (size_t)H;
+    if (!g->region) {
+        fprintf(stderr, "warning: wfc skipped (regions not enabled)\n");
+        return;
+    }
+
+    /* Rebuild the Voronoi sites (deterministic, identical to the regions pass)
+     * to recover site positions and the coarse-grid topology. */
+    int32_t *scratch = (int32_t *)malloc(n * sizeof(int32_t));
+    voronoi_diagram vd;
+    if (!scratch ||
+        voronoi_build(&vd, scratch, W, H, cfg->seed,
+                      cfg->region_spacing, cfg->region_jitter) != 0) {
+        free(scratch);
+        fprintf(stderr, "warning: wfc skipped (voronoi alloc failed)\n");
+        return;
+    }
+    free(scratch);
+    const int ns = vd.n, gx = vd.gx, gy = vd.gy;
+
+    /* Biome-class compatibility (symmetric). GRASS is adjacent to everything. */
+    static const int compat[WC_N][WC_N] = {
+        /* GRASS  */ {1,1,1,1,1,1},
+        /* FOREST */ {1,1,0,1,1,1},
+        /* DESERT */ {1,0,1,0,0,0},
+        /* JUNGLE */ {1,1,0,1,1,0},
+        /* SWAMP  */ {1,1,0,1,1,0},
+        /* SNOW   */ {1,1,0,0,0,1},
+    };
+    uint8_t allowed[WC_N * WC_N];
+    for (int a = 0; a < WC_N; ++a)
+        for (int b = 0; b < WC_N; ++b)
+            allowed[a * WC_N + b] = (uint8_t)compat[a][b];
+
+    /* Per-region climate preference -> per-node weights. */
+    double *weight = (double *)malloc((size_t)ns * WC_N * sizeof(double));
+    int    *outc   = (int *)malloc((size_t)ns * sizeof(int));
+    int    *adjStart = (int *)malloc((size_t)(ns + 1) * sizeof(int));
+    int    *deg      = (int *)calloc((size_t)ns, sizeof(int));
+    if (!weight || !outc || !adjStart || !deg) {
+        free(weight); free(outc); free(adjStart); free(deg); voronoi_free(&vd);
+        fprintf(stderr, "warning: wfc skipped (out of memory)\n");
+        return;
+    }
+    const double BONUS = 8.0;
+    for (int id = 0; id < ns; ++id) {
+        uint64_t s = cfg->seed
+                   ^ (0xC2B2AE3D27D4EB4FULL * (uint64_t)(id + 1))
+                   ^ ((uint64_t)NOISE_LAYER_VORONOI << 40);
+        double mo = (double)(noise_splitmix64(&s) >> 11) / 9007199254740992.0;
+        double tj = (double)(noise_splitmix64(&s) >> 11) / 9007199254740992.0;
+        double ny2 = (H > 1) ? vd.sites[id].y / (double)(H - 1) : 0.5;
+        double lat = 1.0 - 2.0 * fabs(ny2 - 0.5);
+        double temp = (lat * 2.0 - 1.0) * 0.65 + (tj * 2.0 - 1.0) * 0.25
+                    + cfg->temperature_bias;
+        int pref = tcat_to_class(biome_classify(0.4, temp, mo * 2.0 - 1.0));
+        for (int t = 0; t < WC_N; ++t)
+            weight[id * WC_N + t] = 1.0 + (t == pref ? BONUS : 0.0);
+    }
+
+    /* CSR adjacency over the coarse grid (4-neighbour, undirected). */
+    for (int b = 0; b < gy; ++b)
+        for (int a = 0; a < gx; ++a) {
+            int id = b * gx + a;
+            if (a > 0)      ++deg[id];
+            if (a < gx - 1) ++deg[id];
+            if (b > 0)      ++deg[id];
+            if (b < gy - 1) ++deg[id];
+        }
+    adjStart[0] = 0;
+    for (int i = 0; i < ns; ++i) adjStart[i + 1] = adjStart[i] + deg[i];
+    int total = adjStart[ns];
+    int *adjList = (int *)malloc((size_t)(total > 0 ? total : 1) * sizeof(int));
+    int *cur = (int *)malloc((size_t)ns * sizeof(int));
+    if (!adjList || !cur) {
+        free(weight); free(outc); free(adjStart); free(deg);
+        free(adjList); free(cur); voronoi_free(&vd);
+        fprintf(stderr, "warning: wfc skipped (out of memory)\n");
+        return;
+    }
+    for (int i = 0; i < ns; ++i) cur[i] = adjStart[i];
+    for (int b = 0; b < gy; ++b)
+        for (int a = 0; a < gx; ++a) {
+            int id = b * gx + a;
+            if (a > 0)      adjList[cur[id]++] = id - 1;
+            if (a < gx - 1) adjList[cur[id]++] = id + 1;
+            if (b > 0)      adjList[cur[id]++] = id - gx;
+            if (b < gy - 1) adjList[cur[id]++] = id + gx;
+        }
+
+    int rc = wfc_solve_graph(ns, adjStart, adjList, WC_N, allowed, weight,
+                             NULL, cfg->seed, outc);
+
+    long reclassified = 0;
+    if (rc == 0) {
+        for (int y = 0; y < H; ++y)
+            for (int x = 0; x < W; ++x) {
+                size_t i = (size_t)x + (size_t)y * W;
+                if (!is_climate_cat(g->cat[i])) continue;
+                int cls = outc[g->region[i]];
+                int nc = WC_TCAT[cls];
+                if (nc != g->cat[i]) {
+                    g->cat[i] = (uint8_t)nc;
+                    g->id[i]  = biome_tile(nc, cell_hash(cfg->seed, x, y, NOISE_LAYER_BIOME));
+                    ++reclassified;
+                }
+            }
+        fprintf(stderr, "wfc: %d territories solved, %ld cells retinted (legal transitions)\n",
+                ns, reclassified);
+    } else {
+        fprintf(stderr, "wfc: contradiction -> kept climate biomes\n");
+    }
+
+    free(weight); free(outc); free(adjStart); free(deg);
+    free(adjList); free(cur); voronoi_free(&vd);
+}
+
+/*
+ * Cellular-automata pass: grow organic forest clumps. A random fill over the
+ * grass/forest area (plus the existing forest as seeds) is smoothed with a
+ * birth/survival automaton, clustering scattered forest into coherent woods and
+ * clearing lone trees. Only grass<->forest cells are toggled.
+ */
+static void cellular_pass(terrain_grid *g, const mapgen_config *cfg) {
+    const int W = g->width, H = g->height;
+    const size_t n = (size_t)W * (size_t)H;
+    uint8_t *domain = (uint8_t *)malloc(n);
+    uint8_t *mask   = (uint8_t *)malloc(n);
+    if (!domain || !mask) {
+        free(domain); free(mask);
+        fprintf(stderr, "warning: cellular skipped (out of memory)\n");
+        return;
+    }
+    for (size_t i = 0; i < n; ++i)
+        domain[i] = (g->cat[i] == TCAT_GRASS || g->cat[i] == TCAT_FOREST) ? 1 : 0;
+
+    cellular_fill(mask, domain, W, H, cfg->cellular_fill, cfg->seed, NOISE_LAYER_CELLULAR);
+    for (size_t i = 0; i < n; ++i)
+        if (domain[i] && g->cat[i] == TCAT_FOREST) mask[i] = 1;   /* seed existing woods */
+
+    cellular_step(mask, domain, W, H, 5, 4, 0, cfg->cellular_iterations);
+
+    long toForest = 0, toGrass = 0;
+    for (int y = 0; y < H; ++y)
+        for (int x = 0; x < W; ++x) {
+            size_t i = (size_t)x + (size_t)y * W;
+            if (!domain[i]) continue;
+            int nc = mask[i] ? TCAT_FOREST : TCAT_GRASS;
+            if (nc != g->cat[i]) {
+                g->cat[i] = (uint8_t)nc;
+                g->id[i]  = biome_tile(nc, cell_hash(cfg->seed, x, y, NOISE_LAYER_BIOME));
+                if (nc == TCAT_FOREST) ++toForest; else ++toGrass;
+            }
+        }
+    fprintf(stderr, "cellular: forest clumps (+%ld forest, -%ld forest cells)\n",
+            toForest, toGrass);
+    free(domain); free(mask);
+}
+
 int terrain_generate(terrain_grid *g, const mapgen_config *cfg,
                      const tiledata_land *td, struct preview_ctx *pv) {
     const int W = cfg->width, H = cfg->height;
@@ -852,42 +1041,54 @@ int terrain_generate(terrain_grid *g, const mapgen_config *cfg,
         }
     }
 
-    preview_pass(pv, g, "terrain");
+    preview_pass(pv, g, "base_terrain_noise-landmass-biomes");
 
     /* Hydraulic erosion carves valleys/drainage into the height field (and
      * relief) before rivers, so rivers follow the eroded drainage. hf aliases
      * g->hfield, which erosion updates in place. */
     if (cfg->erosion) {
         erosion_apply(g, cfg);
-        preview_pass(pv, g, "erosion");
+        preview_pass(pv, g, "phase2_erosion_carved-valleys");
     }
 
     /* Voronoi territories: organic climate biomes + territory graph. */
     if (cfg->regions) {
         regions_pass(g, cfg);
-        preview_pass(pv, g, "regions");
+        preview_pass(pv, g, "phase3_regions_voronoi-biomes");
+    }
+
+    /* WFC biome transitions over the territory graph. */
+    if (cfg->wfc) {
+        wfc_pass(g, cfg);
+        preview_pass(pv, g, "phase4_wfc_legal-biome-transitions");
+    }
+
+    /* Cellular-automata organic forest clumps. */
+    if (cfg->cellular) {
+        cellular_pass(g, cfg);
+        preview_pass(pv, g, "phase4_cellular_forest-clumps");
     }
 
     if (cfg->rivers) {
         carve_rivers(g, cfg, hf);
-        preview_pass(pv, g, "rivers");
+        preview_pass(pv, g, "base_rivers_meander-fords-lakes");
     }
 
     if (cfg->beaches) {
         beach_pass(g, cfg);
-        preview_pass(pv, g, "beaches");
+        preview_pass(pv, g, "base_beaches_sloped-coast");
     }
 
     if (cfg->passes && cfg->mountains) {
         carve_passes(g, cfg);
-        preview_pass(pv, g, "passes");
+        preview_pass(pv, g, "base_mountain-passes");
     }
 
     /* Flat mode is already level; slope-limiting would only pull coastal land
      * down toward the ocean, so skip it. */
     if (!cfg->flat) {
         limit_slope(g, cfg);
-        preview_pass(pv, g, "slope");
+        preview_pass(pv, g, "base_slope-limit");
     }
 
     noise_layer_free(elev); noise_layer_free(moist);

@@ -52,6 +52,10 @@ enum {
     OPT_REGIONS,
     OPT_REGION_SPACING,
     OPT_REGION_JITTER,
+    OPT_WFC,
+    OPT_CELLULAR,
+    OPT_CELLULAR_FILL,
+    OPT_CELLULAR_ITERS,
     OPT_PASS_PREVIEWS,
     OPT_PASS_PREVIEW_DIR,
     OPT_INSTALL_DIR
@@ -114,6 +118,11 @@ static void print_help(const char *argv0) {
 "  --regions                 Partition the map into Voronoi biome territories.\n"
 "  --region-spacing <n>      Territory size: site spacing in tiles (default 64).\n"
 "  --region-jitter <f>       Site jitter within its cell, [0,1] (default 0.6).\n"
+"  --wfc                     WFC biome transitions over territories (legal\n"
+"                            biome adjacency; implies --regions).\n"
+"  --cellular                Cellular-automata organic forest clumps.\n"
+"  --cellular-fill <f>       Forest random-fill probability, [0,1] (default 0.42).\n"
+"  --cellular-iterations <n> CA smoothing iterations (default 4).\n"
 "  Enrichment (all ON by default; use the --no-* flags to disable):\n"
 "  --no-biomes               Disable climate biomes (snow/desert/jungle/swamp).\n"
 "  --temperature-bias <f>    Shift climate warmer(+)/colder(-) (default 0).\n"
@@ -226,6 +235,10 @@ int main(int argc, char **argv) {
         { "regions",           no_argument,       0, OPT_REGIONS },
         { "region-spacing",    required_argument, 0, OPT_REGION_SPACING },
         { "region-jitter",     required_argument, 0, OPT_REGION_JITTER },
+        { "wfc",               no_argument,       0, OPT_WFC },
+        { "cellular",          no_argument,       0, OPT_CELLULAR },
+        { "cellular-fill",     required_argument, 0, OPT_CELLULAR_FILL },
+        { "cellular-iterations", required_argument, 0, OPT_CELLULAR_ITERS },
         { "tiledata",    required_argument, 0, 'T' },
         { "preview",     required_argument, 0, 'P' },
         { "pass-previews",    no_argument,       0, OPT_PASS_PREVIEWS },
@@ -288,6 +301,10 @@ int main(int argc, char **argv) {
             case OPT_REGIONS:        cfg.regions = 1; break;
             case OPT_REGION_SPACING: cfg.regions = 1; cfg.region_spacing = (int)strtol(optarg, NULL, 0); break;
             case OPT_REGION_JITTER:  cfg.regions = 1; cfg.region_jitter = strtod(optarg, NULL); break;
+            case OPT_WFC:            cfg.wfc = 1; cfg.regions = 1; break;
+            case OPT_CELLULAR:       cfg.cellular = 1; break;
+            case OPT_CELLULAR_FILL:  cfg.cellular = 1; cfg.cellular_fill = strtod(optarg, NULL); break;
+            case OPT_CELLULAR_ITERS: cfg.cellular = 1; cfg.cellular_iterations = (int)strtol(optarg, NULL, 0); break;
             case 'T': snprintf(cfg.tiledata_path, sizeof(cfg.tiledata_path), "%s", optarg); break;
             case 'P': snprintf(cfg.preview_path, sizeof(cfg.preview_path), "%s", optarg); break;
             case OPT_PASS_PREVIEWS: cfg.emit_pass_previews = 1; break;

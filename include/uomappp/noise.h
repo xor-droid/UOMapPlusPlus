@@ -26,7 +26,9 @@ enum {
     NOISE_LAYER_VEG       = 0x08,
     /* --- appended for UOMapPlusPlus library passes (never reorder the above) --- */
     NOISE_LAYER_EROSION   = 0x09,  /* hydraulic-erosion droplet spawn stream */
-    NOISE_LAYER_VORONOI   = 0x0A   /* Voronoi site jitter + per-region climate */
+    NOISE_LAYER_VORONOI   = 0x0A,  /* Voronoi site jitter + per-region climate */
+    NOISE_LAYER_CELLULAR  = 0x0B,  /* cellular-automata random fill (clumps) */
+    NOISE_LAYER_WFC       = 0x0C   /* wave-function-collapse collapse choices */
 };
 
 /* splitmix64: fixed, portable 64-bit mixer used for seed derivation. */

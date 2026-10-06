@@ -61,6 +61,10 @@ typedef struct {
     int      regions;       /* bool: Voronoi climate territories (organic biomes) */
     int      region_spacing;     /* Voronoi site spacing in tiles (territory size) */
     double   region_jitter;      /* [0,1] site jitter within its grid cell */
+    int      wfc;           /* bool: WFC biome transitions over territories (implies regions) */
+    int      cellular;      /* bool: cellular-automata forest clumping */
+    double   cellular_fill;      /* [0,1] forest random-fill probability */
+    int      cellular_iterations;/* CA smoothing iterations */
     int      emit_mapdef;   /* bool: also write map-definitions.snippet.json */
     int      terrain_only;  /* bool: write only mapN.mul (skip statics) */
     int      emit_pass_previews; /* bool: write a PNG snapshot after each pass */

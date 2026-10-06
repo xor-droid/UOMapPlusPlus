@@ -54,6 +54,10 @@ void config_defaults(mapgen_config *cfg) {
     cfg->regions            = 0;     /* off by default: existing maps unchanged */
     cfg->region_spacing     = 64;
     cfg->region_jitter      = 0.6;
+    cfg->wfc                = 0;
+    cfg->cellular           = 0;
+    cfg->cellular_fill      = 0.42;
+    cfg->cellular_iterations = 4;
     cfg->emit_mapdef = 0;
     cfg->terrain_only = 0;
     cfg->emit_pass_previews = 0;
@@ -180,6 +184,15 @@ int config_set_kv(mapgen_config *cfg, const char *key_in, const char *val) {
         cfg->region_spacing = (int)strtol(val, NULL, 0);
     } else if (!strcmp(key, "region_jitter")) {
         cfg->region_jitter = strtod(val, NULL);
+    } else if (!strcmp(key, "wfc")) {
+        if (parse_bool(val, &cfg->wfc) != 0) return -1;
+        if (cfg->wfc) cfg->regions = 1;   /* WFC needs the territory map */
+    } else if (!strcmp(key, "cellular")) {
+        if (parse_bool(val, &cfg->cellular) != 0) return -1;
+    } else if (!strcmp(key, "cellular_fill")) {
+        cfg->cellular_fill = strtod(val, NULL);
+    } else if (!strcmp(key, "cellular_iterations")) {
+        cfg->cellular_iterations = (int)strtol(val, NULL, 0);
     } else if (!strcmp(key, "out")) {
         snprintf(cfg->out_dir, sizeof(cfg->out_dir), "%s", val);
     } else if (!strcmp(key, "tiledata")) {
@@ -357,6 +370,17 @@ int config_validate(const mapgen_config *cfg) {
         }
         if (cfg->region_jitter < 0.0 || cfg->region_jitter > 1.0) {
             fprintf(stderr, "error: region-jitter (%g) must be in [0,1]\n", cfg->region_jitter); ok = 0;
+        }
+    }
+    if (cfg->wfc && !cfg->regions) {
+        fprintf(stderr, "error: --wfc requires --regions (the territory map)\n"); ok = 0;
+    }
+    if (cfg->cellular) {
+        if (cfg->cellular_fill < 0.0 || cfg->cellular_fill > 1.0) {
+            fprintf(stderr, "error: cellular-fill (%g) must be in [0,1]\n", cfg->cellular_fill); ok = 0;
+        }
+        if (cfg->cellular_iterations < 0) {
+            fprintf(stderr, "error: cellular-iterations (%d) must be >= 0\n", cfg->cellular_iterations); ok = 0;
         }
     }
     if (cfg->continent) {
