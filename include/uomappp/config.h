@@ -40,6 +40,7 @@ typedef struct {
     double   mountain_level;     /* ridge threshold in [0,1]; higher = less rock */
     int      mountain_z;         /* extra z added at mountain peaks */
     double   mountain_scale;     /* mountain ridge frequency (0 = auto from frequency) */
+    int      mountain_slope;     /* grade every mountain perimeter N tiles into foothills (0=cliff) */
     int      rivers;        /* bool: carve downhill rivers from high ground */
     int      river_density;      /* source count (0 = auto from map size) */
     int      biomes;        /* bool: climate-band biomes (snow/desert/jungle/swamp) */

@@ -1235,6 +1235,85 @@ static void cliffs_pass(terrain_grid *g, const mapgen_config *cfg) {
             varied, faces);
 }
 
+/* --- Foothills: grade EVERY mountain perimeter into sloped foothills ------ *
+ *
+ * pass_slope grades only the shoulders of carved passes. This grades the outer
+ * band of every mountain range: a BFS from the walkable land ringing each range
+ * carries that edge's land height inward up to `mountain_slope` tiles, and each
+ * mountain cell in the band has its z ramped from the edge land height (at the
+ * perimeter) up to its original peak (at the inner edge of the band). Rock tiles
+ * are kept — the face is still a mountain — only z is lowered, so ranges rise as
+ * sloped foothills instead of vertical walls. Water edges are left as sea cliffs.
+ * Pure BFS, no RNG, fixed iteration order; gated behind cfg->mountain_slope
+ * (0 = off => output byte-identical). */
+static void foothills_pass(terrain_grid *g, const mapgen_config *cfg) {
+    const int W = g->width, H = g->height;
+    const int N = cfg->mountain_slope;
+    if (N <= 0) return;
+    const size_t NC = (size_t)W * (size_t)H;
+    int16_t *dist  = (int16_t *)malloc(NC * sizeof(int16_t));
+    int8_t  *basez = (int8_t  *)malloc(NC * sizeof(int8_t));
+    int8_t  *zorig = (int8_t  *)malloc(NC * sizeof(int8_t));
+    int     *queue = (int     *)malloc(NC * sizeof(int));
+    if (!dist || !basez || !zorig || !queue) {
+        free(dist); free(basez); free(zorig); free(queue);
+        fprintf(stderr, "foothills: out of memory, skipping\n");
+        return;
+    }
+    memcpy(zorig, g->z, NC);
+    for (size_t i = 0; i < NC; ++i) dist[i] = -1;
+    static const int DX[4] = { -1, 1, 0, 0 };
+    static const int DY[4] = {  0, 0, -1, 1 };
+    int head = 0, tail = 0;
+    /* Seed: each walkable land cell bordering a mountain pushes that mountain
+     * neighbour at distance 1, carrying its own z as the foothill base. */
+    for (int y = 0; y < H; ++y)
+        for (int x = 0; x < W; ++x) {
+            size_t i = (size_t)x + (size_t)y * W;
+            uint8_t c = g->cat[i];
+            if (c == TCAT_MOUNTAIN || IS_WATER_CAT(c)) continue;  /* land only */
+            for (int k = 0; k < 4; ++k) {
+                int nx = x + DX[k], ny = y + DY[k];
+                if (nx < 0 || nx >= W || ny < 0 || ny >= H) continue;
+                size_t n = (size_t)nx + (size_t)ny * W;
+                if (g->cat[n] != TCAT_MOUNTAIN || dist[n] >= 0) continue;
+                dist[n]  = 1;
+                basez[n] = g->z[i];
+                queue[tail++] = (int)n;
+            }
+        }
+    /* BFS inward, carrying each edge's land height up to N tiles deep. */
+    while (head < tail) {
+        int ci = queue[head++];
+        int cx = ci % W, cy = ci / W;
+        int d = dist[ci];
+        if (d >= N) continue;
+        for (int k = 0; k < 4; ++k) {
+            int nx = cx + DX[k], ny = cy + DY[k];
+            if (nx < 0 || nx >= W || ny < 0 || ny >= H) continue;
+            size_t n = (size_t)nx + (size_t)ny * W;
+            if (g->cat[n] != TCAT_MOUNTAIN || dist[n] >= 0) continue;
+            dist[n]  = (int16_t)(d + 1);
+            basez[n] = basez[ci];
+            queue[tail++] = (int)n;
+        }
+    }
+    /* Ramp z: near the perimeter -> edge land height; at the band edge -> peak. */
+    long graded = 0;
+    for (size_t i = 0; i < NC; ++i) {
+        if (dist[i] <= 0) continue;
+        double f = (double)dist[i] / (double)N;             /* (0,1] */
+        int b = basez[i];
+        int target = (int)lround((double)b + f * ((double)zorig[i] - (double)b));
+        if (target < g->z[i]) {
+            g->z[i] = (int8_t)clampi(target, -128, 127);
+            ++graded;
+        }
+    }
+    fprintf(stderr, "foothills: %ld mountain cells graded (band %d)\n", graded, N);
+    free(dist); free(basez); free(zorig); free(queue);
+}
+
 /* --- Connectivity: carve passes/bridges so no land is cut off ------------- */
 
 #define CELL_WALK(c) (!IS_WATER_CAT(c) && (c) != TCAT_MOUNTAIN)
@@ -1760,6 +1839,14 @@ int terrain_generate(terrain_grid *g, const mapgen_config *cfg,
     if (cfg->connect) {
         connect_pass(g, cfg);
         preview_pass(pv, g, "connect_passes-and-bridges");
+    }
+
+    /* Foothills: grade every mountain perimeter into sloped foothills (runs
+     * after connect so carved passes aren't re-raised, before cliffs so the
+     * cliff-face detector sees the graded, gentler z). */
+    if (cfg->mountains && cfg->mountain_slope > 0) {
+        foothills_pass(g, cfg);
+        preview_pass(pv, g, "foothills_mountain-perimeter-grade");
     }
 
     /* Pixel-authentic cliff-face mountains (varied rock + cliff-base statics). */
