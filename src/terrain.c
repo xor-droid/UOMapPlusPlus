@@ -167,6 +167,69 @@ static void place_centers(const mapgen_config *cfg, vec2 *c, double *radii,
 }
 
 /*
+ * Priority-flood (+epsilon) depression fill, in place on routing height `f`,
+ * seeded from ocean cells. Hydraulic erosion deposits sediment into shallow
+ * basins; without filling, rivers fall into those pits and pool as lakes a few
+ * tiles from their source instead of flowing to the coast. Filling raises every
+ * non-mountain land cell to the level of its lowest spillway toward the sea and
+ * tilts flat fills by a tiny epsilon, so every cell has a strictly descending
+ * path to open water. Mountains are walls (never flooded through). Deterministic
+ * (min-heap keyed by height, then cell index). Operates on a COPY so g->hfield
+ * is left intact for later passes. (Barnes/Planchon-Darboux priority flood.)
+ */
+static void fd_sift_up(int *heap, size_t i, const float *f) {
+    int v = heap[i];
+    while (i > 0) {
+        size_t p = (i - 1) >> 1;
+        int hp = heap[p];
+        if (f[hp] < f[v] || (f[hp] == f[v] && hp < v)) break;
+        heap[i] = hp; i = p;
+    }
+    heap[i] = v;
+}
+static void fd_sift_down(int *heap, size_t n, size_t i, const float *f) {
+    int v = heap[i];
+    for (;;) {
+        size_t l = 2*i + 1, r = l + 1, m = i;
+        int hm = v;
+        if (l < n && (f[heap[l]] < f[hm] || (f[heap[l]] == f[hm] && heap[l] < hm))) { m = l; hm = heap[l]; }
+        if (r < n && (f[heap[r]] < f[hm] || (f[heap[r]] == f[hm] && heap[r] < hm))) { m = r; hm = heap[r]; }
+        if (m == i) break;
+        heap[i] = hm; heap[m] = v; i = m;
+    }
+}
+static void fill_depressions(const terrain_grid *g, float *f) {
+    const int W = g->width, H = g->height;
+    const size_t N = (size_t)W * (size_t)H;
+    uint8_t *vis = (uint8_t *)calloc(N, 1);
+    int *heap = (int *)malloc(N * sizeof(int));
+    if (!vis || !heap) { free(vis); free(heap); return; }
+    const float EPS = 1e-4f;
+    size_t hn = 0;
+    for (size_t i = 0; i < N; ++i)
+        if (IS_OCEAN_CAT(g->cat[i])) { vis[i] = 1; heap[hn] = (int)i; fd_sift_up(heap, hn, f); ++hn; }
+    while (hn > 0) {
+        int c = heap[0];
+        heap[0] = heap[--hn];
+        if (hn > 0) fd_sift_down(heap, hn, 0, f);
+        float L = f[c];
+        int cx = c % W, cy = c / W;
+        for (int dy = -1; dy <= 1; ++dy)
+            for (int dx = -1; dx <= 1; ++dx) {
+                if (!dx && !dy) continue;
+                int nx = cx + dx, ny = cy + dy;
+                if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+                size_t ni = (size_t)nx + (size_t)ny * W;
+                if (vis[ni] || g->cat[ni] == TCAT_MOUNTAIN) continue;   /* mountains = walls */
+                vis[ni] = 1;
+                if (f[ni] <= L) f[ni] = L + EPS;        /* fill pit + gentle tilt to outlet */
+                heap[hn] = (int)ni; fd_sift_up(heap, hn, f); ++hn;
+            }
+    }
+    free(vis); free(heap);
+}
+
+/*
  * River carving: pick high-ground sources spread across a coarse grid, then
  * trace each one strictly downhill over the height field, marking a ~3-wide
  * water channel until it reaches the sea (or a local pit). Rivers merge where
@@ -1812,7 +1875,18 @@ int terrain_generate(terrain_grid *g, const mapgen_config *cfg,
     }
 
     if (cfg->rivers) {
-        carve_rivers(g, cfg, hf);
+        /* Route rivers on a depression-filled COPY of the height field so they
+         * drain to the coast instead of pooling in erosion-deposited pits;
+         * g->hfield itself is left intact for later passes. */
+        float *rhf = (float *)malloc(n * sizeof(float));
+        if (rhf) {
+            memcpy(rhf, hf, n * sizeof(float));
+            fill_depressions(g, rhf);
+            carve_rivers(g, cfg, rhf);
+            free(rhf);
+        } else {
+            carve_rivers(g, cfg, hf);
+        }
         preview_pass(pv, g, "base_rivers_meander-fords-lakes");
     }
 
