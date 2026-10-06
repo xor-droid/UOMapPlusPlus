@@ -26,6 +26,7 @@ void config_defaults(mapgen_config *cfg) {
     cfg->continents         = 0;
     cfg->continent_count    = 3;
     cfg->continent_scale    = 0.00045;
+    cfg->continent_fill     = 1.00;   /* continent size vs map (distinct landmasses) */
     cfg->flat               = 0;
     cfg->flat_z             = 0;
     cfg->mountains          = 0;
@@ -138,9 +139,11 @@ int config_set_kv(mapgen_config *cfg, const char *key_in, const char *val) {
     } else if (!strcmp(key, "continents")) {
         if (parse_bool(val, &cfg->continents) != 0) return -1;
     } else if (!strcmp(key, "continent_count")) {
-        cfg->continent_count = (int)strtol(val, NULL, 0);
+        cfg->continents = 1; cfg->continent_count = (int)strtol(val, NULL, 0);
     } else if (!strcmp(key, "continent_scale")) {
-        cfg->continent_scale = strtod(val, NULL);
+        cfg->continents = 1; cfg->continent_scale = strtod(val, NULL);
+    } else if (!strcmp(key, "continent_fill")) {
+        cfg->continents = 1; cfg->continent_fill = strtod(val, NULL);
     } else if (!strcmp(key, "flat")) {
         if (parse_bool(val, &cfg->flat) != 0) return -1;
     } else if (!strcmp(key, "flat_z")) {
@@ -391,6 +394,9 @@ int config_validate(const mapgen_config *cfg) {
     }
     if (cfg->continents && (cfg->continent_count < 1 || cfg->continent_count > 64)) {
         fprintf(stderr, "error: continent-count (%d) must be in 1..64\n", cfg->continent_count); ok = 0;
+    }
+    if (cfg->continents && (cfg->continent_fill <= 0.0 || cfg->continent_fill > 2.0)) {
+        fprintf(stderr, "error: continent-fill (%g) must be in (0,2]\n", cfg->continent_fill); ok = 0;
     }
     if (cfg->mountains && (cfg->mountain_level < 0.0 || cfg->mountain_level >= 1.0)) {
         fprintf(stderr, "error: mountain-level (%g) must be in [0,1)\n", cfg->mountain_level); ok = 0;

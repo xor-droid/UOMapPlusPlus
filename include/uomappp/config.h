@@ -33,6 +33,7 @@ typedef struct {
     int      continents;    /* bool: multiple continents via placed centers */
     int      continent_count;    /* number of continents when continents=1 */
     double   continent_scale;    /* frequency of the coastline-warp noise */
+    double   continent_fill;     /* continent size vs map (auto ~50% land at ~0.8) */
     int      flat;          /* bool: level ground everywhere (land z = flat_z) */
     int      flat_z;             /* the single z used for all land when flat */
     int      mountains;     /* bool: add ridged mountain ranges */

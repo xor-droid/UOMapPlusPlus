@@ -26,6 +26,7 @@ enum {
     OPT_CONT_POWER,
     OPT_CONT_SCALE,
     OPT_CONT_COUNT,
+    OPT_CONT_FILL,
     OPT_MOUNTAINS,
     OPT_MTN_LEVEL,
     OPT_MTN_Z,
@@ -108,7 +109,10 @@ static void print_help(const char *argv0) {
 "  --continent-strength <f>  How hard edges fall to ocean (default 2.0; implies --continent).\n"
 "  --continent-power <f>     Falloff curvature (default 2.0; implies --continent).\n"
 "  --continents          Multiple continents (placed centers), ocean between them.\n"
-"  --continent-count <n>     Number of continents (default 3; implies --continents).\n"
+"  --continent-count <n>     Exact number of continents, positions by seed\n"
+"                            (default 3; implies --continents).\n"
+"  --continent-fill <f>      Continent size vs map; ~0.8 => ~50%% land at any\n"
+"                            count (implies --continents).\n"
 "  --continent-scale <f>     Coastline-warp frequency (default 0.00045).\n"
 "  --flat                Level non-mountain ground to one z (mountains keep their height).\n"
 "  --flat-z <int>            The z for flat ground; mountains rise above it (default 0; implies --flat).\n"
@@ -239,6 +243,7 @@ int main(int argc, char **argv) {
         { "continents",  no_argument,       0, 'A' },
         { "continent-scale",    required_argument, 0, OPT_CONT_SCALE },
         { "continent-count",    required_argument, 0, OPT_CONT_COUNT },
+        { "continent-fill",     required_argument, 0, OPT_CONT_FILL },
         { "mountains",   no_argument,       0, OPT_MOUNTAINS },
         { "mountain-level",     required_argument, 0, OPT_MTN_LEVEL },
         { "mountain-z",         required_argument, 0, OPT_MTN_Z },
@@ -318,6 +323,7 @@ int main(int argc, char **argv) {
             case 'A': cfg.continents = 1; break;
             case OPT_CONT_SCALE:    cfg.continents = 1; cfg.continent_scale = strtod(optarg, NULL); break;
             case OPT_CONT_COUNT:    cfg.continents = 1; cfg.continent_count = (int)strtol(optarg, NULL, 0); break;
+            case OPT_CONT_FILL:     cfg.continents = 1; cfg.continent_fill = strtod(optarg, NULL); break;
             case OPT_MOUNTAINS:     cfg.mountains = 1; break;
             case OPT_MTN_LEVEL:     cfg.mountains = 1; cfg.mountain_level = strtod(optarg, NULL); break;
             case OPT_MTN_Z:         cfg.mountains = 1; cfg.mountain_z = (int)strtol(optarg, NULL, 0); break;

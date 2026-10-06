@@ -53,8 +53,10 @@ directory so you can inspect each stage, plus a `final` image.
 
 ## Features
 
-- **Continents** — one central landmass (`--continent`) or several separated by
-  ocean (`--continents`), shaped from elevation noise for organic coastlines.
+- **Continents** — one central landmass (`--continent`) or an **exact number of
+  separate continents** (`--continents --continent-count N`), each a coherent
+  terraced, biome-regioned landmass with ocean between. Positions are randomized
+  by the seed; `--continent-fill` sets their size (≈0.8 distinct, ≈1.4 merged).
 - **Climate biomes** — temperature by latitude + moisture + elevation → snow,
   desert, jungle, swamp, forest, grass, hills. Optionally reshaped into **organic
   Voronoi territories** (`--regions`, with a noise-warp for non-polygonal borders)
