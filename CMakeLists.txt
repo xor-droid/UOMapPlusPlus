@@ -35,6 +35,8 @@ add_executable(uomappp
   src/mapdef.c
   src/pipeline.c
   src/install.c
+  src/field.c
+  src/erosion.c
 )
 
 target_include_directories(uomappp PRIVATE

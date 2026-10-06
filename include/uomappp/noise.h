@@ -23,7 +23,9 @@ enum {
     NOISE_LAYER_MEANDER   = 0x05,
     NOISE_LAYER_TEMPERATURE = 0x06,
     NOISE_LAYER_BIOME     = 0x07,
-    NOISE_LAYER_VEG       = 0x08
+    NOISE_LAYER_VEG       = 0x08,
+    /* --- appended for UOMapPlusPlus library passes (never reorder the above) --- */
+    NOISE_LAYER_EROSION   = 0x09   /* hydraulic-erosion droplet spawn stream */
 };
 
 /* splitmix64: fixed, portable 64-bit mixer used for seed derivation. */

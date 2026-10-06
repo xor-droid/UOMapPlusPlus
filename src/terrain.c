@@ -2,6 +2,7 @@
 #include "uomappp/noise.h"
 #include "uomappp/biome.h"
 #include "uomappp/preview.h"
+#include "uomappp/erosion.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -730,6 +731,14 @@ int terrain_generate(terrain_grid *g, const mapgen_config *cfg,
     }
 
     preview_pass(pv, g, "terrain");
+
+    /* Hydraulic erosion carves valleys/drainage into the height field (and
+     * relief) before rivers, so rivers follow the eroded drainage. hf aliases
+     * g->hfield, which erosion updates in place. */
+    if (cfg->erosion) {
+        erosion_apply(g, cfg);
+        preview_pass(pv, g, "erosion");
+    }
 
     if (cfg->rivers) {
         carve_rivers(g, cfg, hf);

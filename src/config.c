@@ -44,6 +44,13 @@ void config_defaults(mapgen_config *cfg) {
     cfg->beach_width        = 4;
     cfg->lakes              = 1;
     cfg->passes             = 1;
+    cfg->erosion            = 0;      /* off by default: existing maps unchanged */
+    cfg->erosion_density    = 0.20;
+    cfg->erosion_lifetime   = 30;
+    cfg->erosion_radius     = 3;
+    cfg->erosion_erode      = 0.30;
+    cfg->erosion_deposition = 0.30;
+    cfg->erosion_z_scale    = 1.0;   /* eroded relief (z units) folded back 1:1 */
     cfg->emit_mapdef = 0;
     cfg->terrain_only = 0;
     cfg->emit_pass_previews = 0;
@@ -150,6 +157,20 @@ int config_set_kv(mapgen_config *cfg, const char *key_in, const char *val) {
         if (parse_bool(val, &cfg->lakes) != 0) return -1;
     } else if (!strcmp(key, "passes")) {
         if (parse_bool(val, &cfg->passes) != 0) return -1;
+    } else if (!strcmp(key, "erosion")) {
+        if (parse_bool(val, &cfg->erosion) != 0) return -1;
+    } else if (!strcmp(key, "erosion_density")) {
+        cfg->erosion_density = strtod(val, NULL);
+    } else if (!strcmp(key, "erosion_lifetime")) {
+        cfg->erosion_lifetime = (int)strtol(val, NULL, 0);
+    } else if (!strcmp(key, "erosion_radius")) {
+        cfg->erosion_radius = (int)strtol(val, NULL, 0);
+    } else if (!strcmp(key, "erosion_erode")) {
+        cfg->erosion_erode = strtod(val, NULL);
+    } else if (!strcmp(key, "erosion_deposition")) {
+        cfg->erosion_deposition = strtod(val, NULL);
+    } else if (!strcmp(key, "erosion_z_scale")) {
+        cfg->erosion_z_scale = strtod(val, NULL);
     } else if (!strcmp(key, "out")) {
         snprintf(cfg->out_dir, sizeof(cfg->out_dir), "%s", val);
     } else if (!strcmp(key, "tiledata")) {
@@ -302,6 +323,24 @@ int config_validate(const mapgen_config *cfg) {
     }
     if (cfg->beaches && (cfg->beach_width < 0 || cfg->beach_width > 64)) {
         fprintf(stderr, "error: beach-width (%d) must be in 0..64\n", cfg->beach_width); ok = 0;
+    }
+    if (cfg->erosion) {
+        if (cfg->erosion_density < 0.0) {
+            fprintf(stderr, "error: erosion-density (%g) must be >= 0\n", cfg->erosion_density); ok = 0;
+        }
+        if (cfg->erosion_lifetime <= 0) {
+            fprintf(stderr, "error: erosion-lifetime (%d) must be > 0\n", cfg->erosion_lifetime); ok = 0;
+        }
+        if (cfg->erosion_radius < 1 || cfg->erosion_radius > 16) {
+            fprintf(stderr, "error: erosion-radius (%d) must be in 1..16\n", cfg->erosion_radius); ok = 0;
+        }
+        if (cfg->erosion_erode < 0.0 || cfg->erosion_erode > 1.0 ||
+            cfg->erosion_deposition < 0.0 || cfg->erosion_deposition > 1.0) {
+            fprintf(stderr, "error: erosion-erode/deposition must be in [0,1]\n"); ok = 0;
+        }
+        if (cfg->erosion_z_scale < 0.0) {
+            fprintf(stderr, "error: erosion-z-scale (%g) must be >= 0\n", cfg->erosion_z_scale); ok = 0;
+        }
     }
     if (cfg->continent) {
         if (cfg->continent_radius < 0.0 || cfg->continent_radius >= 1.0) {

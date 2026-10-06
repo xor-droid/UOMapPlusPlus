@@ -6,9 +6,15 @@ a given seed/config**. A map is fully described by its seed and configuration.
 ## How it's achieved
 
 1. **Single master seed.** `--seed` (a `uint64`) is the only entropy source.
-2. **Derived per-layer seeds.** Each noise layer (elevation, moisture, …) gets a
-   32-bit seed via `splitmix64` with a fixed per-layer salt (`noise.h`,
-   `NOISE_LAYER_*`). The salts and mixing are frozen as part of the contract.
+2. **Derived per-layer seeds.** Each noise layer (elevation, moisture, …) and
+   each stochastic library pass gets a 32-bit seed via `splitmix64` with a fixed
+   per-layer salt (`noise.h`, `NOISE_LAYER_*`). The salts and mixing are frozen
+   as part of the contract, and **new salts are only ever appended** (never
+   reordered or reused), so adding a pass cannot change existing maps. Salts so
+   far: elevation/moisture/detail/continent/meander/temperature/biome/veg
+   (`0x01`–`0x08`) and `NOISE_LAYER_EROSION` (`0x09`, the hydraulic-erosion
+   droplet-spawn stream). The erosion pass is off by default; with it off, output
+   is byte-identical to pre-erosion builds.
 3. **No nondeterministic inputs.** No `rand()`, no `time()`, no threads, and
    **no environment variables**. Configuration is CLI flags + optional file only.
 4. **Fixed iteration order.** Terrain generation and the slope-limiting passes

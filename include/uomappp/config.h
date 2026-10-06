@@ -51,6 +51,13 @@ typedef struct {
     int      beach_width;        /* beach band width in tiles */
     int      lakes;         /* bool: form lakes at inland river sinks */
     int      passes;        /* bool: carve walkable passes through mountains */
+    int      erosion;       /* bool: hydraulic (droplet) erosion before rivers */
+    double   erosion_density;    /* droplets = density * width * height */
+    int      erosion_lifetime;   /* max steps per droplet */
+    int      erosion_radius;     /* erosion brush radius in tiles */
+    double   erosion_erode;      /* [0,1] fraction of free capacity eroded per step */
+    double   erosion_deposition; /* [0,1] fraction of excess sediment deposited */
+    double   erosion_z_scale;    /* how strongly eroded relief folds back into z (1.0=full) */
     int      emit_mapdef;   /* bool: also write map-definitions.snippet.json */
     int      terrain_only;  /* bool: write only mapN.mul (skip statics) */
     int      emit_pass_previews; /* bool: write a PNG snapshot after each pass */

@@ -80,7 +80,15 @@ out/                      generated output (NOT committed)
 - `noise`    — FastNoiseLite wrapper; the ONE unit that defines `FNL_IMPL`.
                splitmix64-derived per-layer seeds from the master seed (salts in
                `noise.h`, incl. elevation/moisture/continent/temperature/meander/
-               biome/veg). Also `noise_layer_create_ridged` (mountains).
+               biome/veg/**erosion**). Also `noise_layer_create_ridged` (mountains).
+- `field`    — float-grid utilities (the SciPy/NumPy algorithms reimplemented in
+               C, no Python): chamfer **distance transform**, separable **blur**,
+               normalize. Pure/deterministic; shared by erosion and later passes.
+- `erosion`  — **hydraulic (droplet) erosion** pass (off by default). Carves
+               valleys/drainage into the relief (`z`) and routing height
+               (`hfield`) BEFORE rivers, so rivers follow the eroded drainage.
+               Droplets spawn from a splitmix64 stream keyed by
+               `NOISE_LAYER_EROSION`; mountains keep their peaks.
 - `tiledata` — reads the land section of `tiledata.mul` (High Seas format) to
                sanity-check palette tile flags (Wet / Impassable). Optional.
 - `biome`    — climate-band biome classification (temperature-by-latitude +
@@ -183,9 +191,11 @@ in a fixed order by the pipeline orchestrator, each emitting a per-pass PNG:
    previews + `install` resource-swap into the UOFiddler data dir. Existing
    terrain refactored behind the pipeline with **byte-identical output
    preserved** (sha256 gate, default + continents/mountains/rivers configs).
-4. ⬜ **Phase 2 — Terrain realism:** hydraulic erosion (droplet) +
-   distance-transform/mask utilities (SciPy/NumPy algorithms reimplemented in C);
-   erosion-driven drainage feeding rivers.
+4. ✅ **Phase 2 — Terrain realism:** hydraulic erosion (droplet, `erosion`
+   module, salt `0x09`) + distance-transform/blur utilities (`field` module,
+   SciPy/NumPy reimplemented in C); erosion runs before rivers so drainage feeds
+   them. Gated off by default → existing maps byte-identical; deterministic when
+   on (sha256 gate, two runs).
 5. ⬜ **Phase 3 — Regions:** Voronoi/Delaunay biomes & territories; marching
    squares coast/biome boundaries; MST connectivity graph over town candidates.
 6. ⬜ **Phase 4 — Transitions & organic regions:** WFC tile transitions; cellular

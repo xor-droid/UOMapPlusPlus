@@ -44,6 +44,11 @@ enum {
     OPT_BEACH_WIDTH,
     OPT_NO_LAKES,
     OPT_NO_PASSES,
+    OPT_EROSION,
+    OPT_EROSION_DENSITY,
+    OPT_EROSION_LIFETIME,
+    OPT_EROSION_RADIUS,
+    OPT_EROSION_ZSCALE,
     OPT_PASS_PREVIEWS,
     OPT_PASS_PREVIEW_DIR,
     OPT_INSTALL_DIR
@@ -94,6 +99,14 @@ static void print_help(const char *argv0) {
 "  --rivers              Carve downhill rivers from high ground to the sea.\n"
 "  --river-density <n>       How many rivers: number of sources, higher = more\n"
 "                            (default: auto ~ (w+h)/400; e.g. 10 sparse, 120 dense).\n"
+"  Hydraulic erosion (off by default; carves valleys/drainage before rivers):\n"
+"  --erosion                 Enable droplet erosion on the height field.\n"
+"  --erosion-density <f>     Droplets = f * width * height (default 0.20).\n"
+"  --erosion-lifetime <n>    Max steps per droplet (default 30).\n"
+"  --erosion-radius <n>      Erosion brush radius in tiles (default 3).\n"
+"  --erosion-z-scale <f>     How strongly eroded relief folds back into z\n"
+"                            (1.0 = full carve; default 1.0).\n"
+"                            (erosion-erode / erosion-deposition: config file only.)\n"
 "  Enrichment (all ON by default; use the --no-* flags to disable):\n"
 "  --no-biomes               Disable climate biomes (snow/desert/jungle/swamp).\n"
 "  --temperature-bias <f>    Shift climate warmer(+)/colder(-) (default 0).\n"
@@ -198,6 +211,11 @@ int main(int argc, char **argv) {
         { "beach-width",        required_argument, 0, OPT_BEACH_WIDTH },
         { "no-lakes",    no_argument,       0, OPT_NO_LAKES },
         { "no-passes",   no_argument,       0, OPT_NO_PASSES },
+        { "erosion",           no_argument,       0, OPT_EROSION },
+        { "erosion-density",   required_argument, 0, OPT_EROSION_DENSITY },
+        { "erosion-lifetime",  required_argument, 0, OPT_EROSION_LIFETIME },
+        { "erosion-radius",    required_argument, 0, OPT_EROSION_RADIUS },
+        { "erosion-z-scale",   required_argument, 0, OPT_EROSION_ZSCALE },
         { "tiledata",    required_argument, 0, 'T' },
         { "preview",     required_argument, 0, 'P' },
         { "pass-previews",    no_argument,       0, OPT_PASS_PREVIEWS },
@@ -252,6 +270,11 @@ int main(int argc, char **argv) {
             case OPT_BEACH_WIDTH:   cfg.beach_width = (int)strtol(optarg, NULL, 0); break;
             case OPT_NO_LAKES:      cfg.lakes = 0; break;
             case OPT_NO_PASSES:     cfg.passes = 0; break;
+            case OPT_EROSION:          cfg.erosion = 1; break;
+            case OPT_EROSION_DENSITY:  cfg.erosion = 1; cfg.erosion_density = strtod(optarg, NULL); break;
+            case OPT_EROSION_LIFETIME: cfg.erosion = 1; cfg.erosion_lifetime = (int)strtol(optarg, NULL, 0); break;
+            case OPT_EROSION_RADIUS:   cfg.erosion = 1; cfg.erosion_radius = (int)strtol(optarg, NULL, 0); break;
+            case OPT_EROSION_ZSCALE:   cfg.erosion = 1; cfg.erosion_z_scale = strtod(optarg, NULL); break;
             case 'T': snprintf(cfg.tiledata_path, sizeof(cfg.tiledata_path), "%s", optarg); break;
             case 'P': snprintf(cfg.preview_path, sizeof(cfg.preview_path), "%s", optarg); break;
             case OPT_PASS_PREVIEWS: cfg.emit_pass_previews = 1; break;
