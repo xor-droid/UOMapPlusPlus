@@ -75,6 +75,9 @@ typedef struct {
     int      resources;     /* bool: Poisson-disc resource (ore) nodes */
     int      resource_spacing;   /* min distance between resource nodes (tiles) */
     int      cliffs;        /* bool: varied mountain rock tiles + cliff-face statics */
+    int      terrace;       /* bool: flatten land into plateaus (Britannia-like) */
+    int      terrace_step;       /* z quantization step for terraces */
+    int      plain_z;            /* land at or below |plain_z| snaps flat to 0 */
     int      emit_mapdef;   /* bool: also write map-definitions.snippet.json */
     int      terrain_only;  /* bool: write only mapN.mul (skip statics) */
     int      emit_pass_previews; /* bool: write a PNG snapshot after each pass */

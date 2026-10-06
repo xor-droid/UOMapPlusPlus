@@ -74,6 +74,12 @@ out/                      generated output (NOT committed)
                parses config and calls this. New library passes slot in here.
 - `config`   — defaults, config-file parse, presets, validation. No env vars.
                Pipeline keys: `pass_previews`, `pass_preview_dir`, `install_dir`.
+               Presets: `test`, `felucca`, and **`britannia`** (felucca size with
+               values calibrated to the real Felucca `map0` — ~50% water, flat
+               terraced plains + mountain ranges + Voronoi biome regions, so it
+               looks like Britannia not noise). The `terrace` pass (flatten land
+               into plateaus; keys `terrace`/`terrace_step`/`plain_z`) is the key
+               calibration lever.
 - `io`       — explicit little-endian byte writers + path/dir helpers + a
                byte-for-byte `io_copy_file`. **Never `fwrite` raw structs**
                (would leak host endianness/padding).

@@ -39,6 +39,7 @@ unconfigured run is byte-identical to the original generator.
 | 7 | Beaches (sloped coasts) | BFS distance | — | ✅ |
 | 8 | Mountain passes | corridor carve | — | ✅ |
 | 9 | Slope limit (navigability) | relaxation | — | ✅ |
+| 9b | **Terrace** (Britannia-like flat plateaus) | z quantization | `--terrace` | ⬜ |
 | 10 | **Cliff-face mountains** | varied authentic rock tiles + rock statics | `--cliffs` | ⬜ |
 | 11 | **Towns, roads, bridges, buildings, trails** | **Poisson-disc** sites + **MST** + **A\*** roads + **BSP** buildings (real stone-wall statics) + **L-system** trails | `--towns` | ⬜ |
 | 12 | **Resource nodes** (ore) | **Poisson-disc** | `--resources` | ⬜ |
@@ -99,6 +100,11 @@ transforms) is implemented directly in POSIX C. There are no other dependencies.
 ## Quick start
 
 ```sh
+# A Britannia-like world: the 'britannia' preset is calibrated to the real
+# Felucca map0 (~50% water, mostly-flat terraced plains with distinct mountain
+# ranges, coherent biome regions) so it looks and plays like Britannia, not noise
+./build/uomappp --seed 1337 --preset britannia --out ./out --preview ./out/britannia.png
+
 # Small test map with a preview image and a ModernUO definition snippet
 ./build/uomappp --seed 42 --preset test --out ./out \
     --preview ./out/preview.png --emit-mapdef
@@ -126,6 +132,20 @@ with `-` or `_`; see [`config/example.cfg`](config/example.cfg).
 > and the optional config file.
 
 ---
+
+## Looking like Britannia, not noise
+
+Procedural noise alone produces continuously-varying terrain that reads as
+"noise". The real Felucca map is very different, and the differences are
+measurable: it is **~50% water**, land elevation is **overwhelmingly flat**
+(~63% of land at z=0), and **~81% of adjacent land tiles share the same z** —
+large flat plateaus with sharp relief only at rare mountains. The **`terrace`**
+pass reproduces that profile by snapping land z into flat terraces, and the
+**`britannia` preset** bundles it with calibrated continent / sea-level /
+mountain / Voronoi-region values. The result matches the measured Felucca
+distribution closely (water ~50%, land z=0 ~60%, land z>20 ~11%, adjacent
+|dz|==0 ~85-89%) and reads as a coherent continent with biome regions, mountain
+ranges, rivers and polar snow rather than confetti.
 
 ## How it works
 

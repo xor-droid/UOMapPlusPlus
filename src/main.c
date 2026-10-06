@@ -66,6 +66,9 @@ enum {
     OPT_RESOURCES,
     OPT_RESOURCE_SPACING,
     OPT_CLIFFS,
+    OPT_TERRACE,
+    OPT_TERRACE_STEP,
+    OPT_PLAIN_Z,
     OPT_PASS_PREVIEWS,
     OPT_PASS_PREVIEW_DIR,
     OPT_INSTALL_DIR
@@ -91,7 +94,8 @@ static void print_help(const char *argv0) {
 "  --map <N>             Facet / file index -> map<N>.mul triplet (default 0).\n"
 "  --width <tiles>       Map width, multiple of 8 (default 1024).\n"
 "  --height <tiles>      Map height, multiple of 8 (default 1024).\n"
-"  --preset <name>       'test' (1024x1024) or 'felucca' (7168x4096).\n"
+"  --preset <name>       'test' (1024x1024), 'felucca' (7168x4096), or\n"
+"                        'britannia' (felucca size, calibrated to the real map).\n"
 "  --out <dir>           Output directory (default ./out).\n"
 "  --sea-level <float>   Water threshold on elevation noise, [-1,1] (default 0.0).\n"
 "  --frequency <float>   Base noise frequency (default 0.004).\n"
@@ -146,6 +150,9 @@ static void print_help(const char *argv0) {
 "  --resources               Poisson-disc resource (ore) nodes on hills/foothills.\n"
 "  --resource-spacing <n>    Min distance between resource nodes (default 120).\n"
 "  --cliffs                  Varied mountain rock tiles + cliff-face rock statics.\n"
+"  --terrace                 Flatten land into Britannia-like plateaus (vs noise).\n"
+"  --terrace-step <n>        Terrace z quantization step (default 5).\n"
+"  --plain-z <n>             Land within +/-n of 0 snaps flat to 0 (default 3).\n"
 "  Enrichment (all ON by default; use the --no-* flags to disable):\n"
 "  --no-biomes               Disable climate biomes (snow/desert/jungle/swamp).\n"
 "  --temperature-bias <f>    Shift climate warmer(+)/colder(-) (default 0).\n"
@@ -272,6 +279,9 @@ int main(int argc, char **argv) {
         { "resources",         no_argument,       0, OPT_RESOURCES },
         { "resource-spacing",  required_argument, 0, OPT_RESOURCE_SPACING },
         { "cliffs",            no_argument,       0, OPT_CLIFFS },
+        { "terrace",           no_argument,       0, OPT_TERRACE },
+        { "terrace-step",      required_argument, 0, OPT_TERRACE_STEP },
+        { "plain-z",           required_argument, 0, OPT_PLAIN_Z },
         { "tiledata",    required_argument, 0, 'T' },
         { "preview",     required_argument, 0, 'P' },
         { "pass-previews",    no_argument,       0, OPT_PASS_PREVIEWS },
@@ -348,6 +358,9 @@ int main(int argc, char **argv) {
             case OPT_RESOURCES:    cfg.resources = 1; break;
             case OPT_RESOURCE_SPACING: cfg.resources = 1; cfg.resource_spacing = (int)strtol(optarg, NULL, 0); break;
             case OPT_CLIFFS:       cfg.cliffs = 1; break;
+            case OPT_TERRACE:      cfg.terrace = 1; break;
+            case OPT_TERRACE_STEP: cfg.terrace = 1; cfg.terrace_step = (int)strtol(optarg, NULL, 0); break;
+            case OPT_PLAIN_Z:      cfg.terrace = 1; cfg.plain_z = (int)strtol(optarg, NULL, 0); break;
             case 'T': snprintf(cfg.tiledata_path, sizeof(cfg.tiledata_path), "%s", optarg); break;
             case 'P': snprintf(cfg.preview_path, sizeof(cfg.preview_path), "%s", optarg); break;
             case OPT_PASS_PREVIEWS: cfg.emit_pass_previews = 1; break;

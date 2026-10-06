@@ -1134,6 +1134,34 @@ static void resources_pass(terrain_grid *g, const mapgen_config *cfg) {
     free(allow); free(rx); free(ry);
 }
 
+/*
+ * Terrace pass (Britannia calibration): the real Felucca map is overwhelmingly
+ * flat -- ~62% of land sits at z=0 and ~81% of adjacent land tiles share the
+ * same z, forming large equal-elevation plateaus with sharp risers only at
+ * mountains. Continuous noise relief looks like "noise" instead. This pass
+ * snaps non-mountain land z to flat terraces: low ground (|z| <= plain_z) drops
+ * to 0, higher ground rounds to the nearest terrace_step. Water and mountains
+ * are left alone. Deterministic (pure quantization, no RNG); gated by `terrace`.
+ */
+static void terrace_pass(terrain_grid *g, const mapgen_config *cfg) {
+    const int W = g->width, H = g->height;
+    const int step = cfg->terrace_step < 1 ? 1 : cfg->terrace_step;
+    const int pz = cfg->plain_z < 0 ? 0 : cfg->plain_z;
+    long leveled = 0;
+    for (int y = 0; y < H; ++y)
+        for (int x = 0; x < W; ++x) {
+            size_t i = (size_t)x + (size_t)y * W;
+            int c = g->cat[i];
+            if (IS_WATER_CAT(c) || c == TCAT_MOUNTAIN) continue;
+            int z = g->z[i];
+            int nz = (z <= pz && z >= -pz) ? 0
+                                           : (int)lround((double)z / step) * step;
+            if (nz != z) { g->z[i] = (int8_t)clampi(nz, -128, 127); ++leveled; }
+        }
+    fprintf(stderr, "terrace: %ld land cells leveled into plateaus (step %d)\n",
+            leveled, step);
+}
+
 /* --- Phase 6 follow-up: pixel-authentic cliff-face mountains -------------- */
 
 /* Authentic UO mountain/rock LAND tiles (verified against the reference
@@ -1449,6 +1477,13 @@ int terrain_generate(terrain_grid *g, const mapgen_config *cfg,
     if (!cfg->flat) {
         limit_slope(g, cfg);
         preview_pass(pv, g, "base_slope-limit");
+    }
+
+    /* Britannia calibration: flatten land into terraced plateaus (runs after
+     * slope-limit so risers survive). */
+    if (cfg->terrace) {
+        terrace_pass(g, cfg);
+        preview_pass(pv, g, "calib_terrace_britannia-plateaus");
     }
 
     /* Pixel-authentic cliff-face mountains (varied rock + cliff-base statics). */
