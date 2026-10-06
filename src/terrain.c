@@ -1352,6 +1352,9 @@ static void connect_pass(terrain_grid *g, const mapgen_config *cfg) {
 
     int *uf = (int *)malloc((size_t)ncomp * sizeof(int));
     if (uf) for (int i = 0; i < ncomp; ++i) uf[i] = i;
+    /* Low-frequency noise so valleys meander and vary in width (organic, not a
+     * straight carved line). */
+    noise_layer *pn = noise_layer_create(cfg->seed, NOISE_LAYER_PASS, 0.03, 2);
     long connected = 0, carved = 0;
     for (long e = 0; uf && e < ne; ++e) {
         if (E[e].cost > MAXC) break;
@@ -1366,26 +1369,35 @@ static void connect_pass(terrain_grid *g, const mapgen_config *cfg) {
             for (cur = start; cur != -1; cur = prev[cur]) {
                 if (bt[cur] == 0) continue;
                 int bx = cur % W, by = cur / W;
-                /* Carve a wide corridor: a grassy valley floor with a dirt fringe
-                 * (natural pass) through mountains, or a sand causeway over water. */
+                /* Carve a WIDE, MEANDERING grass valley with a dirt trail down the
+                 * middle (through mountains), or a sand causeway (over water). The
+                 * valley centre is displaced and its radius varied by low-freq
+                 * noise so it wanders and its edges are irregular -- natural, not a
+                 * straight line. */
                 const int PW = cfg->pass_width > 0 ? cfg->pass_width : 6;
-                int core = PW - 2; if (core < 1) core = 1;
-                for (int dy = -PW; dy <= PW; ++dy)
-                    for (int dx = -PW; dx <= PW; ++dx) {
+                double mx = pn ? noise_layer_sample(pn, bx, by) : 0.0;
+                double my = pn ? noise_layer_sample(pn, bx + 3001, by + 1511) : 0.0;
+                double nr = pn ? noise_layer_sample(pn, bx + 911, by + 8017) : 0.0;
+                int cxm = bx + (int)lround(mx * (double)PW * 0.8);
+                int cym = by + (int)lround(my * (double)PW * 0.8);
+                int rad = (int)lround((double)PW * (0.65 + 0.55 * (nr * 0.5 + 0.5)));
+                if (rad < 2) rad = 2;
+                for (int dy = -rad; dy <= rad; ++dy)
+                    for (int dx = -rad; dx <= rad; ++dx) {
                         int r2 = dx * dx + dy * dy;
-                        if (r2 > PW * PW) continue;
-                        int nx = bx + dx, ny = by + dy;
+                        if (r2 > rad * rad) continue;
+                        int nx = cxm + dx, ny = cym + dy;
                         if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
                         size_t i = (size_t)nx + (size_t)ny * W;
                         int cc = g->cat[i];
                         if (cc == TCAT_MOUNTAIN) {
-                            if (r2 <= core * core) {              /* grassy valley floor */
+                            if (r2 <= 4) {                        /* dirt trail down the valley */
+                                g->cat[i] = (uint8_t)TCAT_PASS;
+                                g->id[i] = tile_for_cat(TCAT_HILL);
+                            } else {                              /* grassy valley floor */
                                 g->cat[i] = (uint8_t)TCAT_GRASS;
                                 g->id[i] = biome_tile(TCAT_GRASS,
                                            cell_hash(cfg->seed, nx, ny, NOISE_LAYER_BIOME));
-                            } else {                              /* dirt fringe (preview-highlighted) */
-                                g->cat[i] = (uint8_t)TCAT_PASS;
-                                g->id[i] = tile_for_cat(TCAT_HILL);
                             }
                             g->z[i] = (int8_t)clampi(zc, -128, 127);
                         } else if (IS_WATER_CAT(cc)) {
@@ -1402,6 +1414,7 @@ static void connect_pass(terrain_grid *g, const mapgen_config *cfg) {
             ncomp, connected, carved);
 
     free(bt); free(comp); free(dist); free(prev); free(nxt); free(head); free(E); free(uf);
+    noise_layer_free(pn);
 }
 
 /*
