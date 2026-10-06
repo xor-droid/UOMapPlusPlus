@@ -1,0 +1,23 @@
+# Build output
+/build/
+
+# Generated map data and previews
+/out/
+/out_*/
+*.mul
+*.png
+
+# Reference UO client assets — large and copyrighted; never commit.
+/ref/
+/modernuo/
+
+# Keep sample configs even though *.cfg could otherwise be ignored elsewhere
+!/config/*.cfg
+
+# Editor / OS cruft
+*.o
+*.swp
+.DS_Store
+
+# Personal Claude Code settings (machine-specific paths)
+.claude/settings.local.json
