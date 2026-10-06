@@ -122,8 +122,11 @@ out/                      generated output (NOT committed)
                The `towns` terrain pass (off by default, runs last) ties these
                together: Poisson town sites on buildable land → MST → A* roads
                (bridging rivers) → BSP buildings + street grid → L-system trails.
-               Rendered at the terrain-tile level (TCAT_ROAD/BRIDGE/FLOOR/WALL);
-               real statics walls are a follow-up on the statics pipeline.
+               Roads/floors are terrain tiles (TCAT_ROAD/BRIDGE/FLOOR); building
+               **walls and doors are real statics** (authentic UO stone-wall
+               `0x0057`-`0x0059` + door `0x06A5`) appended to `g->statics`.
+               `cliffs` pass: mountains get varied authentic rock land tiles +
+               loose rock statics at sharp faces.
 - `tiledata` — reads the land section of `tiledata.mul` (High Seas format) to
                sanity-check palette tile flags (Wet / Impassable). Optional.
 - `biome`    — climate-band biome classification (temperature-by-latitude +
@@ -141,9 +144,11 @@ out/                      generated output (NOT committed)
 - `vegetation`— deterministic per-cell static placement by biome (trees, cacti,
                reeds, boulders, plants); the curated static-ID sets live here.
 - `mapwriter`— writes `mapN.mul` in the client's column-major block layout.
-- `statics`  — writes `staidxN.mul` + `staticsN.mul`: streams the vegetation
-               records grouped per block with correct index offsets. Empty
-               blocks → `(-1,-1,-1)`. **Towns/POI will add records here too.**
+- `statics`  — writes `staidxN.mul` + `staticsN.mul`: per block it merges the
+               per-cell vegetation records with the grid's world-space statics
+               (town **building walls/doors** + **cliff rocks**, in `g->statics`),
+               sorts canonically, and writes with correct index offsets. Empty
+               blocks → `(-1,-1,-1)`; lengths stay multiples of 7.
 - `preview`  — top-down PNG via stb (per-biome colors). `preview_write_png` for
                a single image; `preview_pass` writes numbered `pass<NN>_<name>.png`
                snapshots (diagnostic only — never affects `.mul` bytes).
@@ -250,9 +255,11 @@ in a fixed order by the pipeline orchestrator, each emitting a per-pass PNG:
    `0x11`, on by default when regions is used); **biome-border dithering**
    (`dither` pass, salt `0x13`); **Poisson-disc resource nodes** (`resources`
    pass, salt `0x12`); verified full pipeline + final PNG + install swap.
-   **Remaining art/statics follow-ups** (need real UO statics, not land tiles):
-   render building walls as statics (Phase 5 follow-up), and pixel-authentic
-   cliff-face mountains.
+9. ✅ **Statics follow-ups:** town building **walls/doors emitted as real UO
+   statics** (grid world-statics merged into `staticsN.mul`); **cliff-face
+   mountains** (`cliffs` pass, salt `0x14`) — varied authentic rock land tiles +
+   rock statics at sharp faces. Static item ids verified by name+flags against
+   the reference `tiledata.mul`.
 
 ### Library → pass → seed map
 

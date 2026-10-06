@@ -842,10 +842,17 @@ static void cellular_pass(terrain_grid *g, const mapgen_config *cfg) {
 
 /* Civilization tiles (validated classic land tile ids reused as crude town
  * terrain; real statics walls are a follow-up on the statics pipeline). */
-#define TILE_TOWN_ROAD   0x0071  /* dirt road / trail */
+#define TILE_TOWN_ROAD   0x0071  /* dirt road / trail (land tile) */
 #define TILE_TOWN_BRIDGE 0x0016  /* river crossing (packed earth) */
-#define TILE_TOWN_FLOOR  0x0016  /* building floor */
-#define TILE_TOWN_WALL   0x00E4  /* building wall (rock) */
+#define TILE_TOWN_FLOOR  0x0016  /* building floor ground (land tile) */
+
+/* Authentic UO static item ids (verified by name+flags against the reference
+ * tiledata.mul item section): stone wall pieces, a wooden door, and loose rock. */
+#define STATIC_WALL_H     0x0057  /* stone wall (E-W run: top/bottom edges) */
+#define STATIC_WALL_V     0x0058  /* stone wall (N-S run: left/right edges) */
+#define STATIC_WALL_CORNER 0x0059 /* stone wall corner/post */
+#define STATIC_DOOR       0x06A5  /* wooden door */
+static const uint16_t STATIC_ROCKS[] = { 0x1363, 0x1364, 0x1365, 0x1368, 0x1369, 0x136C };
 
 #define TOWN_MAX 1024
 
@@ -984,26 +991,32 @@ static void towns_pass(terrain_grid *g, const mapgen_config *cfg) {
             int bx = leaves[l].x + 1, by = leaves[l].y + 1;
             int bw = leaves[l].w - 2, bh = leaves[l].h - 2;
             if (bw < 3 || bh < 3) continue;
-            int anyFloor = 0;
+            int doorx = bx + bw / 2, doory = by + bh - 1;  /* door in the south wall */
             for (int y = by; y < by + bh; ++y)
                 for (int x = bx; x < bx + bw; ++x) {
                     size_t i = (size_t)x + (size_t)y * W;
                     int c = g->cat[i];
                     if (!(c == TCAT_ROAD || c == TCAT_FLOOR || c == TCAT_WALL))
                         continue;                 /* build only on the paved plaza */
+                    /* Ground under the whole footprint is packed-earth floor. */
+                    g->id[i] = TILE_TOWN_FLOOR;
                     int border = (x == bx || x == bx + bw - 1 ||
                                   y == by || y == by + bh - 1);
-                    g->cat[i] = (uint8_t)(border ? TCAT_WALL : TCAT_FLOOR);
-                    g->id[i]  = border ? TILE_TOWN_WALL : TILE_TOWN_FLOOR;
-                    if (!border) anyFloor = 1;
+                    if (!border) {
+                        g->cat[i] = (uint8_t)TCAT_FLOOR;
+                        continue;
+                    }
+                    /* Wall perimeter: real stone-wall statics (door at the gap). */
+                    int isDoor   = (x == doorx && y == doory);
+                    int isCorner = (x == bx || x == bx + bw - 1) &&
+                                   (y == by || y == by + bh - 1);
+                    uint16_t wid = isDoor ? STATIC_DOOR
+                                 : isCorner ? STATIC_WALL_CORNER
+                                 : (y == by || y == by + bh - 1) ? STATIC_WALL_H
+                                 : STATIC_WALL_V;
+                    terrain_add_static(g, wid, x, y, g->z[i], 0);
+                    g->cat[i] = (uint8_t)(isDoor ? TCAT_FLOOR : TCAT_WALL);  /* preview */
                 }
-            /* Punch a door in the south wall. */
-            int doorx = bx + bw / 2, doory = by + bh - 1;
-            if (anyFloor && doorx >= 0 && doory >= 0 && doorx < W && doory < H) {
-                size_t di = (size_t)doorx + (size_t)doory * W;
-                g->cat[di] = (uint8_t)TCAT_FLOOR;
-                g->id[di]  = TILE_TOWN_FLOOR;
-            }
             ++buildings;
         }
 
@@ -1121,6 +1134,55 @@ static void resources_pass(terrain_grid *g, const mapgen_config *cfg) {
     free(allow); free(rx); free(ry);
 }
 
+/* --- Phase 6 follow-up: pixel-authentic cliff-face mountains -------------- */
+
+/* Authentic UO mountain/rock LAND tiles (verified against the reference
+ * tiledata land section) and loose rock statics for cliff bases. */
+static const uint16_t TILES_MTN_ROCK[] = {
+    0x00E4, 0x00E5, 0x00E6, 0x00E7, 0x00F4, 0x00F5,
+    0x0104, 0x0110, 0x0122, 0x0124
+};
+
+/*
+ * Cliffs pass: give mountains proper varied rock texture (instead of a single
+ * flat tile) and, where a mountain cell drops sharply to lower walkable land,
+ * stand loose rock statics at the base so the face reads as a cliff rather than
+ * a plateau edge. Deterministic (cell_hash, salt NOISE_LAYER_CLIFF). Changes
+ * mountain tiles + adds statics, so it is gated behind `cfg->cliffs`.
+ */
+static void cliffs_pass(terrain_grid *g, const mapgen_config *cfg) {
+    const int W = g->width, H = g->height;
+    const int NR = (int)(sizeof(TILES_MTN_ROCK) / sizeof(TILES_MTN_ROCK[0]));
+    const int NS = (int)(sizeof(STATIC_ROCKS) / sizeof(STATIC_ROCKS[0]));
+    long varied = 0, faces = 0;
+    for (int y = 0; y < H; ++y)
+        for (int x = 0; x < W; ++x) {
+            size_t i = (size_t)x + (size_t)y * W;
+            if (g->cat[i] != TCAT_MOUNTAIN) continue;
+            uint64_t h = cell_hash(cfg->seed, x, y, NOISE_LAYER_CLIFF);
+            g->id[i] = TILES_MTN_ROCK[h % (uint64_t)NR];
+            ++varied;
+            /* Cliff face: a mountain cell that drops >4 z to adjacent walkable
+             * land gets a rock static at its foot (sparsely, for a broken face). */
+            int edge = 0;
+            int nb[4] = { (int)i - 1, (int)i + 1, (int)i - W, (int)i + W };
+            int oknb[4] = { x > 0, x < W - 1, y > 0, y < H - 1 };
+            for (int k = 0; k < 4; ++k) {
+                if (!oknb[k]) continue;
+                int c = g->cat[nb[k]];
+                if (!IS_WATER_CAT(c) && c != TCAT_MOUNTAIN &&
+                    g->z[nb[k]] < g->z[i] - 4) { edge = 1; break; }
+            }
+            if (edge && (h & 3u) == 0u) {
+                terrain_add_static(g, STATIC_ROCKS[(h >> 8) % (uint64_t)NS],
+                                   x, y, g->z[i], 0);
+                ++faces;
+            }
+        }
+    fprintf(stderr, "cliffs: %ld mountain cells retextured, %ld cliff-face rocks\n",
+            varied, faces);
+}
+
 int terrain_generate(terrain_grid *g, const mapgen_config *cfg,
                      const tiledata_land *td, struct preview_ctx *pv) {
     const int W = cfg->width, H = cfg->height;
@@ -1138,6 +1200,9 @@ int terrain_generate(terrain_grid *g, const mapgen_config *cfg,
     g->temperature = NULL;
     g->region      = NULL;
     g->flags       = NULL;
+    g->statics     = NULL;
+    g->statics_n   = 0;
+    g->statics_cap = 0;
     float *hf = g->hfield;
     if (!g->id || !g->z || !g->cat || !g->hfield) {
         terrain_free(g); return -1;
@@ -1386,6 +1451,12 @@ int terrain_generate(terrain_grid *g, const mapgen_config *cfg,
         preview_pass(pv, g, "base_slope-limit");
     }
 
+    /* Pixel-authentic cliff-face mountains (varied rock + cliff-base statics). */
+    if (cfg->cliffs) {
+        cliffs_pass(g, cfg);
+        preview_pass(pv, g, "phase6_cliffs_mountain-faces");
+    }
+
     /* Civilization: towns, roads/bridges, buildings, trails (runs last so the
      * slope-limiter doesn't flatten roads). */
     if (cfg->towns) {
@@ -1416,5 +1487,20 @@ void terrain_free(terrain_grid *g) {
     free(g->temperature); g->temperature = NULL;
     free(g->region);      g->region = NULL;
     free(g->flags);       g->flags = NULL;
+    free(g->statics);     g->statics = NULL;
+    g->statics_n = g->statics_cap = 0;
     g->width = g->height = 0;
+}
+
+void terrain_add_static(terrain_grid *g, uint16_t id, int x, int y,
+                        int z, int16_t hue) {
+    if (g->statics_n == g->statics_cap) {
+        int nc = g->statics_cap ? g->statics_cap * 2 : 1024;
+        grid_static *t = (grid_static *)realloc(g->statics,
+                                                (size_t)nc * sizeof(grid_static));
+        if (!t) return;                 /* drop the static rather than crash */
+        g->statics = t; g->statics_cap = nc;
+    }
+    grid_static *s = &g->statics[g->statics_n++];
+    s->id = id; s->x = x; s->y = y; s->z = (int8_t)z; s->hue = hue;
 }

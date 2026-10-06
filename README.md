@@ -3,50 +3,76 @@
 **Multi-library procedural Ultima Online map generator for [ModernUO](https://github.com/modernuo/ModernUO), written in POSIX C.** (binary: `uomappp`)
 
 UOMapPlusPlus is a fork of `uomapgen` that keeps the original POSIX-C / CMake /
-FastNoiseLite stack and its byte-identical determinism contract, and expands the
-single terrain pass set into a **toolbox of generation passes** — each backed by
-the algorithm best suited to its job (noise, hydraulic erosion, Voronoi/Delaunay,
-Wave Function Collapse, A\*, minimum spanning trees, cellular automata, BSP,
-Poisson-disc sampling, marching squares, L-systems, libtcod). Passes run in a
-fixed order inside one binary; each emits a PNG so the map can be watched as it
-evolves (see the roadmap in [`CLAUDE.md`](CLAUDE.md)).
+FastNoiseLite stack and its **byte-identical determinism contract**, and expands
+the single terrain pass set into a **toolbox of generation passes** — each backed
+by the algorithm best suited to its job. Everything is implemented in POSIX C
+(no Python/Java runtime); passes run in a fixed order inside one binary, and each
+can dump a PNG so you can watch the map evolve.
 
 `uomappp` generates classic UO `.mul` map data — terrain (`mapN.mul`), a static
-index (`staidxN.mul`), and statics (`staticsN.mul`) — directly from a seed, using
-[FastNoiseLite](https://github.com/Auburn/FastNoiseLite). A whole world is
-described by its seed plus a handful of options, and the output is
-**byte-identical for a given build and seed**, so maps are perfectly
-reproducible. No game assets are modified and no network access is needed; the
-only input is the client's `tiledata.mul` (read-only, optional).
-
-A top-down **PNG preview** can be rendered without launching the client, and the
-tool can emit a matching `map-definitions.json` snippet for ModernUO.
+index (`staidxN.mul`), and statics (`staticsN.mul`) — directly from a seed. A
+whole world is described by its seed plus a handful of options, and the output is
+**byte-identical for a given build and seed**, so maps are perfectly reproducible.
+No game assets are modified and no network access is needed; the only optional
+input is the client's `tiledata.mul` (read-only).
 
 ![a generated world — three organic continents with climate biomes](docs/example.png)
+
+---
+
+## Generation pipeline
+
+Each row is a pass run in this fixed order by the pipeline harness. The base
+terrain + enrichment passes are inherited from `uomapgen`; the **library passes**
+are the fork's additions and are **off by default** (enable per the flag), so an
+unconfigured run is byte-identical to the original generator.
+
+| # | Pass | Algorithm / library | Flag | On by default |
+|--:|------|---------------------|------|:--:|
+| 0 | Base terrain (elevation, land/sea, biomes, mountains) | FastNoiseLite (OpenSimplex2) | — | ✅ |
+| 1 | **Hydraulic erosion** (valleys, drainage) | droplet erosion + distance transform / blur (SciPy-style, in C) | `--erosion` | ⬜ |
+| 2 | **Regions** (organic climate biomes) | **Voronoi** territories (+ boundary noise-warp) + **MST** + marching squares | `--regions` | ⬜ |
+| 3 | **Biome transitions** | **Wave Function Collapse** | `--wfc` | ⬜ |
+| 4 | **Forest clumps** | **cellular automata** | `--cellular` | ⬜ |
+| 5 | **Biome-border dithering** | hashed stipple | `--dither` | ⬜ |
+| 6 | Rivers (meander, fords, lakes) | downhill trace | `--rivers` | ⬜ |
+| 7 | Beaches (sloped coasts) | BFS distance | — | ✅ |
+| 8 | Mountain passes | corridor carve | — | ✅ |
+| 9 | Slope limit (navigability) | relaxation | — | ✅ |
+| 10 | **Cliff-face mountains** | varied authentic rock tiles + rock statics | `--cliffs` | ⬜ |
+| 11 | **Towns, roads, bridges, buildings, trails** | **Poisson-disc** sites + **MST** + **A\*** roads + **BSP** buildings (real stone-wall statics) + **L-system** trails | `--towns` | ⬜ |
+| 12 | **Resource nodes** (ore) | **Poisson-disc** | `--resources` | ⬜ |
+|  — | Writers + final PNG + install swap | — | — | ✅ |
+
+With `--pass-previews`, every pass writes a descriptively-named snapshot
+(`pass00_base_terrain_…png`, `pass11_phase5_towns_…png`, …) into the output
+directory so you can inspect each stage, plus a `final` image.
 
 ---
 
 ## Features
 
 - **Continents** — one central landmass (`--continent`) or several separated by
-  ocean (`--continents`), shaped from elevation noise for organic coastlines
-  (bays, peninsulas, offshore islands), auto-scaled so each continent is coherent
-  and kept off the map edge by an ocean margin.
-- **Climate biomes** — temperature by latitude (snow at the poles, desert/jungle
-  near the equator) plus moisture and elevation → snow, desert, jungle, swamp,
-  forest, grass, hills.
-- **Rivers** — carved downhill from high ground, meandering, routed **around**
-  mountains, kept crossable with compact **fords**, with **lakes** forming where
-  rivers sink inland.
-- **Mountains** — ridged ranges (impassable rock) that rise above the ground,
-  with carved walkable **passes** so valleys aren't sealed off.
-- **Beaches** — sloped sand around every coast (no cliff at the shoreline).
-- **Vegetation** — deterministic trees, cacti, boulders, reeds, plants and ground
-  cover placed per biome, written as real statics.
-- **Flat mode** — level all non-mountain ground to one Z (mountains keep their
-  height) for building/testing.
+  ocean (`--continents`), shaped from elevation noise for organic coastlines.
+- **Climate biomes** — temperature by latitude + moisture + elevation → snow,
+  desert, jungle, swamp, forest, grass, hills. Optionally reshaped into **organic
+  Voronoi territories** (`--regions`, with a noise-warp for non-polygonal borders)
+  and constrained to **legal transitions** with WFC (`--wfc`).
+- **Hydraulic erosion** (`--erosion`) — droplet erosion carves valleys and
+  drainage into the relief so rivers follow real watercourses.
+- **Rivers** — downhill, meandering, routed around mountains, with **fords** and
+  **lakes**. **Mountains** — ridged ranges with walkable **passes**; `--cliffs`
+  gives them varied authentic rock tiles and cliff-face rock statics.
+- **Towns** (`--towns`) — Poisson-disc town sites, an **MST + A\*** road network
+  that **bridges rivers**, **BSP** building layouts with **real UO stone-wall /
+  door statics**, and **L-system** side-trails.
+- **Resources** (`--resources`) — Poisson-disc ore nodes on hills / foothills.
+- **Vegetation** — deterministic trees, cacti, boulders, reeds, plants per biome,
+  written as real statics. **Forest clumping** via cellular automata (`--cellular`).
+- **Flat mode** (`--flat`) for building/testing.
 - **Deterministic** — same build + seed/config ⇒ identical `.mul` bytes. No RNG,
-  no threads, no environment variables.
+  no threads, no environment variables; every stochastic pass draws from a
+  per-pass splitmix64-derived seed.
 - **Configurable** — every option is a CLI flag or a key in an optional INI-style
   config file (CLI overrides the file).
 
@@ -64,7 +90,9 @@ cmake --build build -j1
 ```
 
 FastNoiseLite and `stb_image_write` are vendored under `third_party/` (see
-`THIRD-PARTY.md`); there are no other dependencies.
+`THIRD-PARTY.md`); every other algorithm (erosion, Voronoi, WFC, A\*, BSP,
+Poisson-disc, L-systems, cellular automata, MST, marching squares, distance
+transforms) is implemented directly in POSIX C. There are no other dependencies.
 
 ---
 
@@ -75,143 +103,63 @@ FastNoiseLite and `stb_image_write` are vendored under `third_party/` (see
 ./build/uomappp --seed 42 --preset test --out ./out \
     --preview ./out/preview.png --emit-mapdef
 
-# Full Felucca-sized world: 3 organic continents, mountains, sparse rivers,
-# climate biomes + vegetation (all enrichment is on by default)
-./build/uomappp --seed 2024 --preset felucca --continents --continent-count 3 \
-    --mountains --rivers --river-density 10 --out ./out --preview ./out/world.png
-
-# Flat, buildable version of the same world (mountains still elevated)
+# The full toolbox: continents, erosion, Voronoi biomes + WFC transitions,
+# forest clumps, dithered borders, cliffs, towns, and resources — with a PNG
+# dumped after every pass, installed into a UO client/data directory.
 ./build/uomappp --seed 2024 --preset felucca --continents --mountains --rivers \
-    --flat --out ./out_flat
+    --erosion --regions --wfc --cellular --dither --cliffs --towns --resources \
+    --out ./out --pass-previews --install-dir /path/to/uo/data --emit-mapdef
+
+# Flat, buildable version (mountains still elevated)
+./build/uomappp --seed 2024 --preset felucca --continents --mountains --flat --out ./out_flat
 
 # Drive everything from a config file (CLI flags still override it)
 ./build/uomappp --config config/example.cfg --seed 7
 ```
 
----
-
-## Command-line options
-
-```
-uomappp 0.1.0 - procedural UO terrain generator for ModernUO
-
-Usage: uomappp [options]
-
-Output is byte-identical for a given build + seed/config.
-Writes map<N>.mul and (unless --terrain-only) staidx<N>.mul and
-statics<N>.mul into the output directory.
-
-Options:
-  --seed <uint64>       Master seed (default 0). Same seed => same bytes.
-  --config <file>       Read an INI-like config file first; CLI flags override it.
-  --map <N>             Facet / file index -> map<N>.mul triplet (default 0).
-  --width <tiles>       Map width, multiple of 8 (default 1024).
-  --height <tiles>      Map height, multiple of 8 (default 1024).
-  --preset <name>       'test' (1024x1024) or 'felucca' (7168x4096).
-  --out <dir>           Output directory (default ./out).
-  --sea-level <float>   Water threshold on elevation noise, [-1,1] (default 0.0).
-  --frequency <float>   Base noise frequency (default 0.004).
-  --octaves <int>       fBm octaves (default 5).
-  --max-slope <int>     Max z step between adjacent land tiles (default 4).
-  --land-z-max <int>    Highest land z from elevation, 0..127 (default 45).
-  --water-z <int>       Flat z for water cells (default -5).
-
-  Landmass shape:
-  --continent           Radial falloff: one large central landmass ringed by ocean.
-  --continent-radius <f>    Solid-land core radius, [0,1) (default 0.55; implies --continent).
-  --continent-strength <f>  How hard edges fall to ocean (default 2.0; implies --continent).
-  --continent-power <f>     Falloff curvature (default 2.0; implies --continent).
-  --continents          Multiple continents (placed centers), ocean between them.
-  --continent-count <n>     Number of continents (default 3; implies --continents).
-
-  Elevation / mountains:
-  --flat                Level non-mountain ground to one z (mountains keep their height).
-  --flat-z <int>            The z for flat ground; mountains rise above it (default 0; implies --flat).
-  --mountains           Add ridged mountain ranges (impassable rock peaks).
-  --mountain-level <f>      Ridge threshold [0,1); higher = fewer/sparser ranges (default 0.70).
-  --mountain-z <int>        Extra z at peaks, 0..127 (default 70).
-  --mountain-scale <f>      Ridge frequency; smaller = bigger/broader ranges
-                            (default: auto = frequency*0.5).
-
-  Rivers:
-  --rivers              Carve downhill rivers from high ground to the sea.
-  --river-density <n>       How many rivers: number of sources, higher = more
-                            (default: auto ~ (w+h)/400; e.g. 10 sparse, 120 dense).
-
-  Enrichment (all ON by default; use the --no-* flags to disable):
-  --no-biomes               Disable climate biomes (snow/desert/jungle/swamp).
-  --temperature-bias <f>    Shift climate warmer(+)/colder(-) (default 0).
-  --no-vegetation           Skip tree/rock/plant statics (statics stay empty).
-  --tree-density <f>        Tree fraction of eligible cells, 0..1 (default 0.08).
-  --rock-density <f>        Rock/boulder fraction, 0..1 (default 0.02).
-  --plant-density <f>       Ground-cover fraction, 0..1 (default 0.05).
-  --no-beaches              Skip sloped sand beaches around coasts.
-  --beach-width <int>       Beach band width in tiles (default 4).
-  --no-lakes                Skip lakes at inland river sinks.
-  --no-passes               Skip carving walkable passes through mountains.
-
-  Output:
-  --tiledata <path>     tiledata.mul used to sanity-check tile flags
-                        (default ./ref/UONewDawn/tiledata.mul; optional).
-  --preview <file.png>  Also render a top-down preview image.
-  --emit-mapdef         Also write map-definitions.snippet.json for ModernUO.
-  --terrain-only        Write only map<N>.mul (skip staidx/statics).
-  --help                Show this help and exit.
-  --version             Show version and exit.
-```
+Run `./build/uomappp --help` for the full, grouped option list (landmass shape,
+elevation/mountains, rivers, erosion, regions, WFC/cellular, towns, detail/polish,
+previews/install, and outputs). Keys in the config file mirror the long options
+with `-` or `_`; see [`config/example.cfg`](config/example.cfg).
 
 > **Note:** `uomappp` never reads environment variables. All input is CLI flags
 > and the optional config file.
 
 ---
 
-## Config file
-
-Instead of (or alongside) flags, use an INI-style file. Keys mirror the long
-options with `-` or `_`; `#` or `;` start comments. CLI flags override the file.
-See [`config/example.cfg`](config/example.cfg).
-
-```ini
-seed       = 2024
-preset     = felucca
-continents = true
-continent_count = 3
-mountains  = true
-rivers     = true
-river_density = 10
-tree_density  = 0.08
-```
-
----
-
 ## How it works
 
-For each tile the generator computes an elevation field (fBm noise) plus a
-continent falloff to decide land vs. sea, derives a biome from temperature
-(latitude + noise + elevation) and moisture, and picks a land tile and Z. Then
-successive passes carve meandering rivers (with fords and lakes), raise ridged
-mountains (with passes), slope beaches onto every coast, and scatter vegetation
-statics per biome. Everything is seeded from a single master seed via
-`splitmix64`, iterated in a fixed order, and written little-endian by hand, so
-output is byte-identical per build.
+For each tile the base pass computes an elevation field (fBm noise) plus a
+continent falloff to decide land vs. sea, derives a biome from temperature and
+moisture, and picks a land tile and Z. The optional library passes then reshape
+it — erosion carves drainage, Voronoi territories (noise-warped) + WFC give
+organic transition-legal biomes, cellular automata clump forests, rivers/beaches/
+passes/slope run, cliffs retexture mountains, and the civilization pass lays down
+Poisson town sites joined by MST + A\* roads with BSP buildings (real stone-wall
+statics) and L-system trails. Everything is seeded from a single master seed via
+`splitmix64` with a frozen, append-only per-pass salt, iterated in a fixed order,
+and written little-endian by hand — so output is byte-identical per build.
 
-See [`docs/FORMAT.md`](docs/FORMAT.md) for the exact `.mul` byte layout and
-[`docs/DETERMINISM.md`](docs/DETERMINISM.md) for the reproducibility contract.
+Town building walls/doors and cliff rocks are emitted as **real statics** and
+merged into `staticsN.mul` in canonical per-block order (lengths stay multiples
+of 7). See [`docs/FORMAT.md`](docs/FORMAT.md) for the `.mul` byte layout and
+[`docs/DETERMINISM.md`](docs/DETERMINISM.md) for the reproducibility contract and
+the salt table.
 
 ---
 
 ## Using the maps
 
 **ModernUO:** copy `mapN.mul`, `staidxN.mul`, `staticsN.mul` into a directory
-listed in the server's `dataDirectories`. The map's `width`/`height` **must
-match** the entry in `Data/map-definitions.json` — use `--emit-mapdef` to get a
-matching snippet, or `--preset felucca` for a drop-in `map0`.
+listed in the server's `dataDirectories` (or use `--install-dir` to copy them
+there automatically). The map's `width`/`height` **must match** the entry in
+`Data/map-definitions.json` — use `--emit-mapdef` to get a matching snippet, or
+`--preset felucca` for a drop-in `map0`.
 
-**Viewing without a server:** render a `--preview` PNG, or point a tool like
-**UOFiddler** at a UO client directory that contains the generated triplet (plus
-the client's `tiledata.mul`, `radarcol.mul`, `hues.mul`, art) and open the Map
-tab. Back up the client's original `map0/staidx0/statics0` first if you overwrite
-them.
+**Viewing without a server:** render a `--preview` PNG, or point **UOFiddler** at
+a UO client directory containing the generated triplet (plus the client's
+`tiledata.mul`, `radarcol.mul`, `hues.mul`, art) and open the Map tab. Back up the
+client's original `map0/staidx0/statics0` first if you overwrite them.
 
 ---
 
@@ -219,13 +167,15 @@ them.
 
 ```
 CMakeLists.txt          build (always -j1)
-include/uomappp/*.h    module headers
-src/*.c                 config, noise, biome, terrain, vegetation,
-                        mapwriter, statics, preview, mapdef, io, main
+include/uomappp/*.h     module headers
+src/*.c                 pipeline, config, noise, field, erosion, biome, terrain,
+                        voronoi, marching, mst, wfc, cellular, poisson, astar,
+                        bsp, lsystem, vegetation, mapwriter, statics, preview,
+                        mapdef, install, io, main
 third_party/            vendored FastNoiseLite + stb_image_write
 config/example.cfg      annotated sample config
 docs/FORMAT.md          .mul byte layout
-docs/DETERMINISM.md     reproducibility rules
+docs/DETERMINISM.md     reproducibility rules + per-pass salt table
 ```
 
 ---

@@ -13,6 +13,19 @@ static int rec_less(const static_rec *a, const static_rec *b) {
     return a->id < b->id;
 }
 
+/* A grid static bucketed by block index, for merging with vegetation. */
+typedef struct { int bi; static_rec rec; } blk_static;
+
+static int blk_cmp(const void *A, const void *B) {
+    const blk_static *a = (const blk_static *)A, *b = (const blk_static *)B;
+    if (a->bi != b->bi) return a->bi < b->bi ? -1 : 1;
+    if (rec_less(&a->rec, &b->rec)) return -1;
+    if (rec_less(&b->rec, &a->rec)) return 1;
+    return 0;
+}
+
+#define STATICS_BLOCK_MAX 512
+
 static int write_rec(FILE *f, const static_rec *r) {
     return (io_write_u16le(f, r->id) != 0 ||
             io_write_u8(f, r->x) != 0 ||
@@ -37,11 +50,32 @@ int statics_write(const terrain_grid *g, const mapgen_config *cfg,
     FILE *fs = fopen(path, "wb");
     if (!fs) { fprintf(stderr, "error: cannot open %s\n", path); fclose(fi); return -1; }
 
-    /* Up to 64 cells * VEG_MAX_PER_CELL records per block. */
-    static_rec buf[64 * VEG_MAX_PER_CELL];
+    /* Vegetation (<=64*VEG_MAX_PER_CELL) plus any merged grid statics per block. */
+    static_rec buf[STATICS_BLOCK_MAX];
     int32_t offset = 0;   /* running byte offset into statics file */
     int rc = 0;
     long total = 0;
+
+    /* Pre-bucket the grid's extra statics (building walls, cliff rocks) by block
+     * index so we can merge-walk them alongside the column-major block loop. */
+    blk_static *extra = NULL;
+    long en = 0, ei = 0;
+    if (g->statics_n > 0) {
+        extra = (blk_static *)malloc((size_t)g->statics_n * sizeof(blk_static));
+        if (!extra) { fclose(fi); fclose(fs); return -1; }
+        for (int s = 0; s < g->statics_n; ++s) {
+            const grid_static *gs = &g->statics[s];
+            if (gs->x < 0 || gs->y < 0 || gs->x >= W || gs->y >= H) continue;
+            extra[en].bi = (gs->x >> 3) * BH + (gs->y >> 3);
+            extra[en].rec.id  = gs->id;
+            extra[en].rec.x   = (uint8_t)(gs->x & 7);
+            extra[en].rec.y   = (uint8_t)(gs->y & 7);
+            extra[en].rec.z   = gs->z;
+            extra[en].rec.hue = gs->hue;
+            ++en;
+        }
+        qsort(extra, (size_t)en, sizeof(blk_static), blk_cmp);
+    }
 
     /* Column-major block order: blockIndex = bx*BH + by (matches map/staidx). */
     for (int bx = 0; bx < BW && rc == 0; ++bx) {
@@ -55,6 +89,13 @@ int statics_write(const terrain_grid *g, const mapgen_config *cfg,
                                              x, y, &buf[nb]);
                     nb += k;
                 }
+
+            /* Merge extra statics for this block. */
+            int bi = bx * BH + by;
+            while (ei < en && extra[ei].bi == bi) {
+                if (nb < STATICS_BLOCK_MAX) buf[nb++] = extra[ei].rec;
+                ++ei;
+            }
 
             if (nb == 0) {
                 /* empty block */
@@ -84,6 +125,7 @@ int statics_write(const terrain_grid *g, const mapgen_config *cfg,
 
     if (fclose(fs) != 0) rc = -1;
     if (fclose(fi) != 0) rc = -1;
+    free(extra);
     if (rc != 0) fprintf(stderr, "error: failed writing statics for map %d\n", map_index);
     else fprintf(stderr, "statics: %ld records, %d bytes\n", total, offset);
     return rc;

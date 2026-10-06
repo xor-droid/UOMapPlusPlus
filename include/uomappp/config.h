@@ -74,6 +74,7 @@ typedef struct {
     double   dither_strength;    /* [0,1] fraction of border cells to swap */
     int      resources;     /* bool: Poisson-disc resource (ore) nodes */
     int      resource_spacing;   /* min distance between resource nodes (tiles) */
+    int      cliffs;        /* bool: varied mountain rock tiles + cliff-face statics */
     int      emit_mapdef;   /* bool: also write map-definitions.snippet.json */
     int      terrain_only;  /* bool: write only mapN.mul (skip statics) */
     int      emit_pass_previews; /* bool: write a PNG snapshot after each pass */

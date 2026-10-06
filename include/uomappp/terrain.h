@@ -47,6 +47,15 @@ enum {
  * introduces them allocates them (erosion/Voronoi/etc. in later phases). Always
  * check for NULL before reading them. terrain_free() releases whatever is set.
  */
+/* A placed static item in world coordinates (x,y in tiles). Collected by the
+ * civilization/cliff passes and merged into staticsN.mul by statics_write. */
+typedef struct {
+    uint16_t id;
+    int      x, y;
+    int8_t   z;
+    int16_t  hue;
+} grid_static;
+
 typedef struct {
     int       width;       /* map width in tiles */
     int       height;      /* map height in tiles */
@@ -58,7 +67,14 @@ typedef struct {
     float    *temperature; /* [reserved] per-cell temperature (NULL until used) */
     int32_t  *region;      /* [reserved] Voronoi/biome territory id (NULL until used) */
     uint8_t  *flags;       /* [reserved] per-cell feature mask (NULL until used) */
+    grid_static *statics;  /* extra statics (building walls, cliff rocks) */
+    int       statics_n;
+    int       statics_cap;
 } terrain_grid;
+
+/* Append a world-space static item to the grid (grows the array). */
+void terrain_add_static(terrain_grid *g, uint16_t id, int x, int y,
+                        int z, int16_t hue);
 
 /* Forward declaration: the per-pass preview context lives in preview.h. Passing
  * NULL disables intermediate previews. */

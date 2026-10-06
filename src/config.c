@@ -67,6 +67,7 @@ void config_defaults(mapgen_config *cfg) {
     cfg->dither_strength    = 0.35;
     cfg->resources          = 0;
     cfg->resource_spacing   = 120;
+    cfg->cliffs             = 0;
     cfg->emit_mapdef = 0;
     cfg->terrain_only = 0;
     cfg->emit_pass_previews = 0;
@@ -220,6 +221,8 @@ int config_set_kv(mapgen_config *cfg, const char *key_in, const char *val) {
         if (parse_bool(val, &cfg->resources) != 0) return -1;
     } else if (!strcmp(key, "resource_spacing")) {
         cfg->resource_spacing = (int)strtol(val, NULL, 0);
+    } else if (!strcmp(key, "cliffs")) {
+        if (parse_bool(val, &cfg->cliffs) != 0) return -1;
     } else if (!strcmp(key, "out")) {
         snprintf(cfg->out_dir, sizeof(cfg->out_dir), "%s", val);
     } else if (!strcmp(key, "tiledata")) {

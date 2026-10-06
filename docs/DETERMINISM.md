@@ -20,10 +20,12 @@ a given seed/config**. A map is fully described by its seed and configuration.
    trail branching), `NOISE_LAYER_BSP` (`0x0F`, BSP splits), `NOISE_LAYER_TOWN`
    (`0x10`), `NOISE_LAYER_WARP` (`0x11`, Voronoi boundary domain-warp; y uses
    `+0x1000`), `NOISE_LAYER_RESOURCE` (`0x12`, Poisson resource nodes) and
-   `NOISE_LAYER_DITHER` (`0x13`, biome-border dithering). The erosion/regions/
-   wfc/cellular/towns/dither/resources passes are all off by default; with them
-   off, output is byte-identical to the pre-fork builds. A* and MST use no RNG
-   (fixed tie-breaks).
+   `NOISE_LAYER_DITHER` (`0x13`, biome-border dithering) and `NOISE_LAYER_CLIFF`
+   (`0x14`, mountain rock-tile variation + cliff faces). The erosion/regions/
+   wfc/cellular/towns/dither/resources/cliffs passes are all off by default; with
+   them off, output is byte-identical to the pre-fork builds. A* and MST use no
+   RNG (fixed tie-breaks). Town building walls and cliff rocks are emitted as
+   real statics, merged into `staticsN.mul` in canonical per-block order.
 3. **No nondeterministic inputs.** No `rand()`, no `time()`, no threads, and
    **no environment variables**. Configuration is CLI flags + optional file only.
 4. **Fixed iteration order.** Terrain generation and the slope-limiting passes
