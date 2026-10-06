@@ -16,7 +16,7 @@ whole world is described by its seed plus a handful of options, and the output i
 No game assets are modified and no network access is needed; the only optional
 input is the client's `tiledata.mul` (read-only).
 
-![a generated world — three organic continents with climate biomes](docs/example.png)
+![a generated world — three organic continents with climate biomes, rivers, mountain ranges graded into foothills, and connecting passes/causeways](docs/example.png)
 
 ---
 
