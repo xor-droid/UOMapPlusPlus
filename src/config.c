@@ -35,6 +35,7 @@ void config_defaults(mapgen_config *cfg) {
     cfg->mountain_scale     = 0.0;   /* 0 => auto (frequency * 0.5) */
     cfg->rivers             = 1;     /* on by default (disable with --no-rivers) */
     cfg->river_density      = 0;
+    cfg->river_width        = 3;     /* dilation rings; bigger = wider/more visible rivers */
     cfg->biomes             = 1;
     cfg->temperature_bias   = 0.0;
     cfg->vegetation         = 1;
@@ -170,6 +171,8 @@ int config_set_kv(mapgen_config *cfg, const char *key_in, const char *val) {
         if (parse_bool(val, &cfg->rivers) != 0) return -1;
     } else if (!strcmp(key, "river_density")) {
         cfg->river_density = (int)strtol(val, NULL, 0);
+    } else if (!strcmp(key, "river_width")) {
+        cfg->rivers = 1; cfg->river_width = (int)strtol(val, NULL, 0);
     } else if (!strcmp(key, "biomes")) {
         if (parse_bool(val, &cfg->biomes) != 0) return -1;
     } else if (!strcmp(key, "temperature_bias")) {
@@ -427,6 +430,7 @@ int config_dump(const mapgen_config *cfg, const char *path) {
     fprintf(f, "mountain_z = %d\n", cfg->mountain_z);
     fprintf(f, "mountain_scale = %.9g\n", cfg->mountain_scale);
     fprintf(f, "river_density = %d\n", cfg->river_density);
+    fprintf(f, "river_width = %d\n", cfg->river_width);
     fprintf(f, "temperature_bias = %.9g\n", cfg->temperature_bias);
     fprintf(f, "tree_density = %.9g\n", cfg->tree_density);
     fprintf(f, "rock_density = %.9g\n", cfg->rock_density);
@@ -546,6 +550,9 @@ int config_validate(const mapgen_config *cfg) {
     }
     if (cfg->rivers && cfg->river_density < 0) {
         fprintf(stderr, "error: river-density (%d) must be >= 0\n", cfg->river_density); ok = 0;
+    }
+    if (cfg->rivers && (cfg->river_width < 1 || cfg->river_width > 32)) {
+        fprintf(stderr, "error: river-width (%d) must be in 1..32\n", cfg->river_width); ok = 0;
     }
     if (cfg->tree_density < 0.0 || cfg->tree_density > 1.0 ||
         cfg->rock_density < 0.0 || cfg->rock_density > 1.0 ||

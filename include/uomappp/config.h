@@ -43,6 +43,7 @@ typedef struct {
     int      mountain_slope;     /* grade every mountain perimeter N tiles into foothills (0=cliff) */
     int      rivers;        /* bool: carve downhill rivers from high ground */
     int      river_density;      /* source count (0 = auto from map size) */
+    int      river_width;        /* dilation rings: wider = more visible rivers */
     int      biomes;        /* bool: climate-band biomes (snow/desert/jungle/swamp) */
     double   temperature_bias;   /* shift climate warmer(+)/colder(-) */
     int      vegetation;    /* bool: place tree/rock/plant statics */

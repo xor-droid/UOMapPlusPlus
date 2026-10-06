@@ -389,27 +389,31 @@ static void carve_rivers(terrain_grid *g, const mapgen_config *cfg,
         if (got_sea) ++reached;
     }
 
-    /* Widen rivers by one cell (4-neighbour dilation) so channels read clearly
-     * and look like real rivers. Uses a sentinel so it stays a single ring and
-     * does not cascade within the pass. */
+    /* Widen rivers by 4-neighbour dilation so channels read clearly and look
+     * like real rivers. Each ring adds one cell to every bank; river_width rings
+     * -> wider, more visible rivers. A sentinel keeps each ring from cascading
+     * within itself. */
     const uint8_t PEND = 250;
-    for (int y = 0; y < H; ++y)
-        for (int x = 0; x < W; ++x) {
-            int i = x + y * W;
-            if (IS_WATER_CAT(g->cat[i]) || g->cat[i] == TCAT_MOUNTAIN) continue;
-            int near = 0;
-            if (x > 0     && g->cat[i - 1] == TCAT_RIVER) near = 1;
-            else if (x < W-1 && g->cat[i + 1] == TCAT_RIVER) near = 1;
-            else if (y > 0     && g->cat[i - W] == TCAT_RIVER) near = 1;
-            else if (y < H-1 && g->cat[i + W] == TCAT_RIVER) near = 1;
-            if (near) g->cat[i] = PEND;
-        }
-    for (size_t i = 0; i < (size_t)W * H; ++i)
-        if (g->cat[i] == PEND) {
-            g->cat[i] = TCAT_RIVER;
-            g->id[i]  = TILE_RIVER;
-            g->z[i]   = (int8_t)clampi(g->z[i] - 1, -128, 127);
-        }
+    int rings = cfg->river_width > 0 ? cfg->river_width : 1;
+    for (int r = 0; r < rings; ++r) {
+        for (int y = 0; y < H; ++y)
+            for (int x = 0; x < W; ++x) {
+                int i = x + y * W;
+                if (IS_WATER_CAT(g->cat[i]) || g->cat[i] == TCAT_MOUNTAIN) continue;
+                int near = 0;
+                if (x > 0        && g->cat[i - 1] == TCAT_RIVER) near = 1;
+                else if (x < W-1 && g->cat[i + 1] == TCAT_RIVER) near = 1;
+                else if (y > 0   && g->cat[i - W] == TCAT_RIVER) near = 1;
+                else if (y < H-1 && g->cat[i + W] == TCAT_RIVER) near = 1;
+                if (near) g->cat[i] = PEND;
+            }
+        for (size_t i = 0; i < (size_t)W * H; ++i)
+            if (g->cat[i] == PEND) {
+                g->cat[i] = TCAT_RIVER;
+                g->id[i]  = TILE_RIVER;
+                g->z[i]   = (int8_t)clampi(g->z[i] - 1, -128, 127);
+            }
+    }
 
     /* Fords: a compact crossing at each anchor so no area is landlocked by a
      * river, without long sandbars or bridges to nowhere. Each ford floods the

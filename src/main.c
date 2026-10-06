@@ -36,6 +36,7 @@ enum {
     OPT_RIVERS,
     OPT_NO_RIVERS,
     OPT_RIVER_DENSITY,
+    OPT_RIVER_WIDTH,
     OPT_NO_BIOMES,
     OPT_TEMP_BIAS,
     OPT_NO_VEG,
@@ -143,6 +144,8 @@ static void print_help(const char *argv0) {
 "  --no-rivers           Skip rivers.\n"
 "  --river-density <n>       How many rivers: number of sources, higher = more\n"
 "                            (default: auto ~ (w+h)/400; e.g. 10 sparse, 120 dense).\n"
+"  --river-width <n>         River width in dilation rings; bigger = wider, more\n"
+"                            visible rivers (default 3, 1..32).\n"
 "  Hydraulic erosion (ON by default; carves valleys/drainage before rivers):\n"
 "  --erosion                 Enable droplet erosion on the height field.\n"
 "  --no-erosion              Disable hydraulic erosion.\n"
@@ -313,6 +316,7 @@ int main(int argc, char **argv) {
         { "rivers",      no_argument,       0, OPT_RIVERS },
         { "no-rivers",   no_argument,       0, OPT_NO_RIVERS },
         { "river-density",      required_argument, 0, OPT_RIVER_DENSITY },
+        { "river-width",        required_argument, 0, OPT_RIVER_WIDTH },
         { "no-biomes",   no_argument,       0, OPT_NO_BIOMES },
         { "temperature-bias",   required_argument, 0, OPT_TEMP_BIAS },
         { "no-vegetation", no_argument,     0, OPT_NO_VEG },
@@ -410,6 +414,7 @@ int main(int argc, char **argv) {
             case OPT_RIVERS:        cfg.rivers = 1; break;
             case OPT_NO_RIVERS:     cfg.rivers = 0; break;
             case OPT_RIVER_DENSITY: cfg.rivers = 1; cfg.river_density = (int)strtol(optarg, NULL, 0); break;
+            case OPT_RIVER_WIDTH:   cfg.rivers = 1; cfg.river_width = (int)strtol(optarg, NULL, 0); break;
             case OPT_NO_BIOMES:     cfg.biomes = 0; break;
             case OPT_TEMP_BIAS:     cfg.temperature_bias = strtod(optarg, NULL); break;
             case OPT_NO_VEG:        cfg.vegetation = 0; break;
