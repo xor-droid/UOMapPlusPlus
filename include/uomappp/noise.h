@@ -39,7 +39,8 @@ enum {
     NOISE_LAYER_CLIFF     = 0x14,  /* mountain rock-tile variation + cliff faces */
     NOISE_LAYER_CONTPLACE = 0x15,  /* continent center placement (positions by seed) */
     NOISE_LAYER_CLEARING  = 0x16,  /* Poisson building-clearing placement */
-    NOISE_LAYER_PASS      = 0x17   /* pass meander + width variation (organic valleys) */
+    NOISE_LAYER_PASS      = 0x17,  /* pass meander + width variation (organic valleys) */
+    NOISE_LAYER_VARY      = 0x18   /* --vary: seed-derived macro-parameter variation */
 };
 
 /* splitmix64: fixed, portable 64-bit mixer used for seed derivation. */

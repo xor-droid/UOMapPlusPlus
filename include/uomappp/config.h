@@ -23,6 +23,7 @@ typedef struct {
     double   sea_level;     /* elevation noise threshold in [-1,1] for water */
     double   frequency;     /* base noise frequency */
     int      octaves;       /* fbm octaves */
+    int      vary;          /* bool: derive sea/mountains/temperature/continent-size from the seed so each seed is a distinct world */
     int      max_slope;     /* max |z| step between adjacent land tiles */
     int      land_z_max;    /* highest land z produced from elevation */
     int      water_z;       /* flat z assigned to water cells */
@@ -103,6 +104,14 @@ typedef struct {
 
 /* Fill cfg with built-in defaults. */
 void config_defaults(mapgen_config *cfg);
+
+/* If cfg->vary is set, perturb the macro parameters (sea level, mountain
+ * density/height, temperature bias, continent size) by amounts derived
+ * deterministically from cfg->seed, so each seed is a visibly distinct world,
+ * then clear cfg->vary (the concrete resolved values are what gets dumped, so a
+ * dumped config reproduces the exact map without re-varying). No-op if unset.
+ * Call once after defaults/file/preset/CLI are resolved, before validate/dump. */
+void config_apply_vary(mapgen_config *cfg);
 
 /* Parse an INI-like "key = value" file into cfg (keys mirror CLI long opts
  * with '-' replaced by '_'). Returns 0 on success, -1 on error (message to

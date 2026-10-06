@@ -1,5 +1,7 @@
 #include "uomappp/config.h"
+#include "uomappp/noise.h"
 
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -16,6 +18,7 @@ void config_defaults(mapgen_config *cfg) {
     cfg->sea_level   = 0.0;
     cfg->frequency   = 0.004;
     cfg->octaves     = 5;
+    cfg->vary        = 0;     /* --vary: per-seed macro variation (off by default) */
     cfg->max_slope   = 4;
     cfg->land_z_max  = 45;
     cfg->water_z     = -5;
@@ -95,6 +98,34 @@ void config_defaults(mapgen_config *cfg) {
     cfg->dump_config_path[0] = '\0';
 }
 
+static double clampd(double v, double lo, double hi) {
+    return v < lo ? lo : (v > hi ? hi : v);
+}
+
+void config_apply_vary(mapgen_config *cfg) {
+    if (!cfg->vary)
+        return;
+    /* One deterministic splitmix64 stream keyed by the seed. Each draw is a
+     * uniform in [-1,1]; the fixed draw order keeps this reproducible. */
+    uint64_t s = cfg->seed ^ ((uint64_t)NOISE_LAYER_VARY << 56);
+    #define VARY_U() (((double)(noise_splitmix64(&s) >> 11) / 9007199254740992.0) * 2.0 - 1.0)
+    cfg->sea_level        += 0.07 * VARY_U();   /* wetter / drier worlds */
+    cfg->mountain_level   += 0.09 * VARY_U();   /* fewer / more mountains (lower = more) */
+    cfg->mountain_z       += (int)lround(18.0 * VARY_U());  /* lower / higher peaks */
+    cfg->temperature_bias += 0.55 * VARY_U();   /* snowy <-> desert/jungle */
+    cfg->continent_fill   += 0.22 * VARY_U();   /* smaller / bigger continents */
+    #undef VARY_U
+    /* Keep every world valid and still Britannia-flavoured. */
+    cfg->sea_level       = clampd(cfg->sea_level, -0.45, -0.10);
+    cfg->mountain_level  = clampd(cfg->mountain_level, 0.45, 0.80);
+    if (cfg->mountain_z < 45)  cfg->mountain_z = 45;
+    if (cfg->mountain_z > 95)  cfg->mountain_z = 95;
+    cfg->temperature_bias = clampd(cfg->temperature_bias, -0.8, 0.8);
+    cfg->continent_fill  = clampd(cfg->continent_fill, 0.65, 1.35);
+    /* Expanded to concrete values; a dumped config reproduces without re-varying. */
+    cfg->vary = 0;
+}
+
 static int parse_bool(const char *v, int *out) {
     if (!strcmp(v, "1") || !strcasecmp(v, "true") || !strcasecmp(v, "yes") ||
         !strcasecmp(v, "on")) { *out = 1; return 0; }
@@ -133,6 +164,8 @@ int config_set_kv(mapgen_config *cfg, const char *key_in, const char *val) {
         cfg->frequency = strtod(val, NULL);
     } else if (!strcmp(key, "octaves")) {
         cfg->octaves = (int)strtol(val, NULL, 0);
+    } else if (!strcmp(key, "vary")) {
+        if (parse_bool(val, &cfg->vary) != 0) return -1;
     } else if (!strcmp(key, "max_slope")) {
         cfg->max_slope = (int)strtol(val, NULL, 0);
     } else if (!strcmp(key, "land_z_max")) {
@@ -490,6 +523,7 @@ int config_dump(const mapgen_config *cfg, const char *path) {
     fprintf(f, "resources = %s\n",    cfg->resources ? "true" : "false");
     fprintf(f, "cliffs = %s\n",       cfg->cliffs ? "true" : "false");
     fprintf(f, "terrace = %s\n",      cfg->terrace ? "true" : "false");
+    fprintf(f, "vary = %s\n",         cfg->vary ? "true" : "false");
     fprintf(f, "connect = %s\n",      cfg->connect ? "true" : "false");
     fprintf(f, "causeways = %s\n",    cfg->causeways ? "true" : "false");
     fprintf(f, "clearings = %s\n",    cfg->clearings ? "true" : "false");

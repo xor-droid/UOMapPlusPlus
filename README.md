@@ -89,6 +89,10 @@ directory so you can inspect each stage, plus a `final` image.
 - **Resources** (`--resources`) — Poisson-disc ore nodes on hills / foothills.
 - **Vegetation** — deterministic trees, cacti, boulders, reeds, plants per biome,
   written as real statics. **Forest clumping** via cellular automata (`--cellular`).
+- **Per-seed variety** (`--vary`) — derives each world's sea level, mountain
+  density/height, temperature and continent size from the seed, so different
+  seeds are visibly distinct worlds (snowy vs desert, wet vs dry, few vs many
+  mountains) instead of the same preset with a reshaped coastline.
 - **Flat mode** (`--flat`) for building/testing.
 - **Deterministic** — same build + seed/config ⇒ identical `.mul` bytes. No RNG,
   no threads, no environment variables; every stochastic pass draws from a

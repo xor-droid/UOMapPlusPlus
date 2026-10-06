@@ -21,7 +21,8 @@
 
 /* Long-only option codes (no short equivalents). */
 enum {
-    OPT_CONT_RADIUS = 1000,
+    OPT_VARY = 1000,
+    OPT_CONT_RADIUS,
     OPT_CONT_STRENGTH,
     OPT_CONT_POWER,
     OPT_CONT_SCALE,
@@ -115,6 +116,9 @@ static void print_help(const char *argv0) {
 "  --height <tiles>      Map height, multiple of 8 (default 1024).\n"
 "  --preset <name>       'test' (1024x1024), 'felucca' (7168x4096), or\n"
 "                        'britannia' (felucca size, calibrated to the real map).\n"
+"  --vary                Derive sea level, mountain density/height, temperature\n"
+"                        and continent size from the seed, so each seed is a\n"
+"                        visibly distinct (still Britannia-flavoured) world.\n"
 "  --out <dir>           Output directory (default ./out).\n"
 "  --sea-level <float>   Water threshold on elevation noise, [-1,1] (default 0.0).\n"
 "  --frequency <float>   Base noise frequency (default 0.004).\n"
@@ -292,6 +296,7 @@ int main(int argc, char **argv) {
         { "width",       required_argument, 0, 'W' },
         { "height",      required_argument, 0, 'H' },
         { "preset",      required_argument, 0, 'p' },
+        { "vary",        no_argument,       0, OPT_VARY },
         { "out",         required_argument, 0, 'o' },
         { "sea-level",   required_argument, 0, 'L' },
         { "frequency",   required_argument, 0, 'f' },
@@ -390,6 +395,7 @@ int main(int argc, char **argv) {
             case 'W': cfg.width = (int)strtol(optarg, NULL, 0); break;
             case 'H': cfg.height = (int)strtol(optarg, NULL, 0); break;
             case 'p': if (config_apply_preset(&cfg, optarg) != 0) return 2; break;
+            case OPT_VARY: cfg.vary = 1; break;
             case 'o': snprintf(cfg.out_dir, sizeof(cfg.out_dir), "%s", optarg); break;
             case 'L': cfg.sea_level = strtod(optarg, NULL); break;
             case 'f': cfg.frequency = strtod(optarg, NULL); break;
@@ -485,6 +491,10 @@ int main(int argc, char **argv) {
             default:  fprintf(stderr, "Try '%s --help'.\n", argv[0]); return 2;
         }
     }
+
+    /* --vary: expand seed-derived macro variation into concrete values (after
+     * preset + CLI are resolved, before validate/dump so the dump is exact). */
+    config_apply_vary(&cfg);
 
     if (config_validate(&cfg) != 0)
         return 2;

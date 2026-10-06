@@ -24,7 +24,7 @@ a given seed/config**. A map is fully described by its seed and configuration.
    (`0x14`, mountain rock-tile variation + cliff faces) and
    `NOISE_LAYER_CONTPLACE` (`0x15`, continent-center placement = positions by
    seed), `NOISE_LAYER_CLEARING` (`0x16`, Poisson building-clearing placement)
-   and `NOISE_LAYER_PASS` (`0x17`, connect-pass meander + width variation). The
+   `NOISE_LAYER_PASS` (`0x17`, connect-pass meander + width variation) and `NOISE_LAYER_VARY` (`0x18`, --vary seed-derived macro-parameter variation). The
    towns/resources/cliffs/connect/clearings passes are off by default, while
    rivers/erosion/regions/wfc/cellular/dither are **on by default** (disable each
    with its `--no-*` flag). Output stays byte-identical for a given seed **and**
