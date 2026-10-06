@@ -25,4 +25,7 @@ int io_join_path(char *out, size_t out_sz, const char *dir, const char *name);
 /* mkdir -p style: ensure directory exists. Returns 0/-1. */
 int io_ensure_dir(const char *path);
 
+/* Copy a file byte-for-byte (overwriting dst if it exists). Returns 0/-1. */
+int io_copy_file(const char *dst_path, const char *src_path);
+
 #endif /* UOMAPGEN_IO_H */

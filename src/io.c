@@ -66,3 +66,26 @@ int io_ensure_dir(const char *path) {
         return -1;
     return 0;
 }
+
+int io_copy_file(const char *dst_path, const char *src_path) {
+    FILE *src = fopen(src_path, "rb");
+    if (!src)
+        return -1;
+    FILE *dst = fopen(dst_path, "wb");
+    if (!dst) {
+        fclose(src);
+        return -1;
+    }
+    char buf[1 << 16];
+    size_t r;
+    int rc = 0;
+    while ((r = fread(buf, 1, sizeof(buf), src)) > 0) {
+        if (fwrite(buf, 1, r, dst) != r) { rc = -1; break; }
+    }
+    if (rc == 0 && ferror(src))
+        rc = -1;
+    if (fclose(dst) != 0)
+        rc = -1;
+    fclose(src);
+    return rc;
+}

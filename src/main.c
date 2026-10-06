@@ -8,12 +8,7 @@
  */
 #include "uomappp/config.h"
 #include "uomappp/io.h"
-#include "uomappp/tiledata.h"
-#include "uomappp/terrain.h"
-#include "uomappp/mapwriter.h"
-#include "uomappp/statics.h"
-#include "uomappp/preview.h"
-#include "uomappp/mapdef.h"
+#include "uomappp/pipeline.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -48,7 +43,10 @@ enum {
     OPT_NO_BEACHES,
     OPT_BEACH_WIDTH,
     OPT_NO_LAKES,
-    OPT_NO_PASSES
+    OPT_NO_PASSES,
+    OPT_PASS_PREVIEWS,
+    OPT_PASS_PREVIEW_DIR,
+    OPT_INSTALL_DIR
 };
 
 static void print_version(void) {
@@ -109,7 +107,12 @@ static void print_help(const char *argv0) {
 "  --no-passes               Skip carving walkable passes through mountains.\n"
 "  --tiledata <path>     tiledata.mul used to sanity-check tile flags\n"
 "                        (default ./ref/UONewDawn/tiledata.mul; optional).\n"
-"  --preview <file.png>  Also render a top-down preview image.\n"
+"  --preview <file.png>  Also render a final top-down preview image.\n"
+"  --pass-previews       Write a PNG snapshot after each generation pass.\n"
+"  --pass-preview-dir <dir>  Directory for pass PNGs (default: the output dir;\n"
+"                            implies --pass-previews).\n"
+"  --install-dir <dir>   Copy the final .mul triplet into dir (the directory\n"
+"                        UOFiddler/ModernUO loads), overwriting any files there.\n"
 "  --emit-mapdef         Also write map-definitions.snippet.json for ModernUO.\n"
 "  --terrain-only        Write only map<N>.mul (skip staidx/statics).\n"
 "  --help                Show this help and exit.\n"
@@ -197,6 +200,9 @@ int main(int argc, char **argv) {
         { "no-passes",   no_argument,       0, OPT_NO_PASSES },
         { "tiledata",    required_argument, 0, 'T' },
         { "preview",     required_argument, 0, 'P' },
+        { "pass-previews",    no_argument,       0, OPT_PASS_PREVIEWS },
+        { "pass-preview-dir", required_argument, 0, OPT_PASS_PREVIEW_DIR },
+        { "install-dir",      required_argument, 0, OPT_INSTALL_DIR },
         { "emit-mapdef", no_argument,       0, 'M' },
         { "terrain-only",no_argument,       0, 't' },
         { "help",        no_argument,       0, 'h' },
@@ -248,6 +254,14 @@ int main(int argc, char **argv) {
             case OPT_NO_PASSES:     cfg.passes = 0; break;
             case 'T': snprintf(cfg.tiledata_path, sizeof(cfg.tiledata_path), "%s", optarg); break;
             case 'P': snprintf(cfg.preview_path, sizeof(cfg.preview_path), "%s", optarg); break;
+            case OPT_PASS_PREVIEWS: cfg.emit_pass_previews = 1; break;
+            case OPT_PASS_PREVIEW_DIR:
+                cfg.emit_pass_previews = 1;
+                snprintf(cfg.pass_preview_dir, sizeof(cfg.pass_preview_dir), "%s", optarg);
+                break;
+            case OPT_INSTALL_DIR:
+                snprintf(cfg.install_dir, sizeof(cfg.install_dir), "%s", optarg);
+                break;
             case 'M': cfg.emit_mapdef = 1; break;
             case 't': cfg.terrain_only = 1; break;
             case 'h': print_help(argv[0]); return 0;
@@ -269,39 +283,5 @@ int main(int argc, char **argv) {
            UOMG_VERSION, (unsigned long long)cfg.seed, cfg.map_index,
            cfg.width, cfg.height, BW, BH, cfg.out_dir);
 
-    /* Optional tile-flag reference (never fails hard). */
-    tiledata_land td;
-    tiledata_load(&td, cfg.tiledata_path);
-    if (!td.loaded)
-        fprintf(stderr, "note: tiledata not loaded from '%s' (palette flags unchecked)\n",
-                cfg.tiledata_path);
-
-    terrain_grid grid;
-    if (terrain_generate(&grid, &cfg, &td) != 0) {
-        fprintf(stderr, "error: terrain generation failed (out of memory?)\n");
-        return 1;
-    }
-
-    int rc = 0;
-    if (mapwriter_write(&grid, cfg.out_dir, cfg.map_index) != 0) rc = 1;
-
-    if (rc == 0 && !cfg.terrain_only)
-        if (statics_write(&grid, &cfg, cfg.out_dir, cfg.map_index) != 0) rc = 1;
-
-    if (rc == 0 && cfg.preview_path[0])
-        if (preview_write_png(&grid, cfg.preview_path) != 0) rc = 1;
-
-    if (rc == 0 && cfg.emit_mapdef)
-        if (mapdef_write_snippet(cfg.out_dir, cfg.map_index, cfg.width, cfg.height) != 0) rc = 1;
-
-    terrain_free(&grid);
-
-    if (rc == 0) {
-        long long map_bytes = (long long)BW * BH * 196;
-        printf("done: map%d.mul = %lld bytes%s%s\n",
-               cfg.map_index, map_bytes,
-               cfg.terrain_only ? "" : ", staidx/statics written",
-               cfg.preview_path[0] ? ", preview written" : "");
-    }
-    return rc;
+    return pipeline_run(&cfg);
 }

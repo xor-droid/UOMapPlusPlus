@@ -53,10 +53,13 @@ typedef struct {
     int      passes;        /* bool: carve walkable passes through mountains */
     int      emit_mapdef;   /* bool: also write map-definitions.snippet.json */
     int      terrain_only;  /* bool: write only mapN.mul (skip statics) */
+    int      emit_pass_previews; /* bool: write a PNG snapshot after each pass */
     char     out_dir[UOMG_PATH_MAX];
     char     tiledata_path[UOMG_PATH_MAX];
-    char     preview_path[UOMG_PATH_MAX];  /* empty string = no preview */
-    char     config_path[UOMG_PATH_MAX];   /* empty string = none */
+    char     preview_path[UOMG_PATH_MAX];      /* empty string = no final preview */
+    char     pass_preview_dir[UOMG_PATH_MAX];  /* dir for pass PNGs (empty => out_dir) */
+    char     install_dir[UOMG_PATH_MAX];       /* copy final .mul triplet here (empty => skip) */
+    char     config_path[UOMG_PATH_MAX];       /* empty string = none */
 } mapgen_config;
 
 /* Fill cfg with built-in defaults. */

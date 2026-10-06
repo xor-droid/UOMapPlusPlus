@@ -65,3 +65,21 @@ int preview_write_png(const terrain_grid *g, const char *path) {
     }
     return 0;
 }
+
+void preview_pass(preview_ctx *pv, const terrain_grid *g, const char *name) {
+    if (!pv || !pv->cfg || !pv->cfg->emit_pass_previews)
+        return;
+    const char *dir = pv->cfg->pass_preview_dir[0] ? pv->cfg->pass_preview_dir
+                                                    : pv->cfg->out_dir;
+    char path[UOMG_PATH_MAX];
+    int n = snprintf(path, sizeof(path), "%s/pass%02d_%s.png",
+                     dir, pv->count, name);
+    if (n < 0 || (size_t)n >= sizeof(path)) {
+        fprintf(stderr, "warning: pass preview path too long (%s/%s)\n", dir, name);
+        return;
+    }
+    if (preview_write_png(g, path) == 0)
+        fprintf(stderr, "pass %02d: %s -> %s\n", pv->count, name, path);
+    /* Advance even on write failure so numbering stays aligned to stages. */
+    ++pv->count;
+}

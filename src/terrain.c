@@ -1,6 +1,7 @@
 #include "uomappp/terrain.h"
 #include "uomappp/noise.h"
 #include "uomappp/biome.h"
+#include "uomappp/preview.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -520,7 +521,7 @@ static void carve_passes(terrain_grid *g, const mapgen_config *cfg) {
 }
 
 int terrain_generate(terrain_grid *g, const mapgen_config *cfg,
-                     const tiledata_land *td) {
+                     const tiledata_land *td, struct preview_ctx *pv) {
     const int W = cfg->width, H = cfg->height;
     const size_t n = (size_t)W * (size_t)H;
 
@@ -529,9 +530,16 @@ int terrain_generate(terrain_grid *g, const mapgen_config *cfg,
     g->id  = (uint16_t *)malloc(n * sizeof(uint16_t));
     g->z   = (int8_t  *)malloc(n * sizeof(int8_t));
     g->cat = (uint8_t *)malloc(n * sizeof(uint8_t));
-    float *hf = (float *)malloc(n * sizeof(float));
-    if (!g->id || !g->z || !g->cat || !hf) {
-        free(hf); terrain_free(g); return -1;
+    /* The height field now lives on the grid so later passes can reuse it; it
+     * is released by terrain_free(). Reserved layers stay NULL until used. */
+    g->hfield      = (float *)malloc(n * sizeof(float));
+    g->moisture    = NULL;
+    g->temperature = NULL;
+    g->region      = NULL;
+    g->flags       = NULL;
+    float *hf = g->hfield;
+    if (!g->id || !g->z || !g->cat || !g->hfield) {
+        terrain_free(g); return -1;
     }
 
     /* Continent centers + base radius first, so the continent-shape elevation
@@ -582,7 +590,7 @@ int terrain_generate(terrain_grid *g, const mapgen_config *cfg,
         || (cfg->biomes && !temp)) {
         noise_layer_free(elev); noise_layer_free(moist);
         noise_layer_free(cont); noise_layer_free(mtn); noise_layer_free(temp);
-        free(hf); terrain_free(g); return -1;
+        terrain_free(g); return -1;   /* terrain_free releases g->hfield */
     }
 
     validate_palette(td);
@@ -721,31 +729,46 @@ int terrain_generate(terrain_grid *g, const mapgen_config *cfg,
         }
     }
 
-    if (cfg->rivers)
+    preview_pass(pv, g, "terrain");
+
+    if (cfg->rivers) {
         carve_rivers(g, cfg, hf);
+        preview_pass(pv, g, "rivers");
+    }
 
-    if (cfg->beaches)
+    if (cfg->beaches) {
         beach_pass(g, cfg);
+        preview_pass(pv, g, "beaches");
+    }
 
-    if (cfg->passes && cfg->mountains)
+    if (cfg->passes && cfg->mountains) {
         carve_passes(g, cfg);
+        preview_pass(pv, g, "passes");
+    }
 
     /* Flat mode is already level; slope-limiting would only pull coastal land
      * down toward the ocean, so skip it. */
-    if (!cfg->flat)
+    if (!cfg->flat) {
         limit_slope(g, cfg);
+        preview_pass(pv, g, "slope");
+    }
 
     noise_layer_free(elev); noise_layer_free(moist);
     noise_layer_free(cont); noise_layer_free(mtn); noise_layer_free(temp);
-    free(hf);
+    /* g->hfield is kept for later passes and freed by terrain_free(). */
     return 0;
 }
 
 void terrain_free(terrain_grid *g) {
     if (!g)
         return;
-    free(g->id);  g->id = NULL;
-    free(g->z);   g->z = NULL;
-    free(g->cat); g->cat = NULL;
+    free(g->id);          g->id = NULL;
+    free(g->z);           g->z = NULL;
+    free(g->cat);         g->cat = NULL;
+    free(g->hfield);      g->hfield = NULL;
+    free(g->moisture);    g->moisture = NULL;
+    free(g->temperature); g->temperature = NULL;
+    free(g->region);      g->region = NULL;
+    free(g->flags);       g->flags = NULL;
     g->width = g->height = 0;
 }

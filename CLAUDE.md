@@ -68,9 +68,15 @@ out/                      generated output (NOT committed)
 
 ### Modules (`src/` + matching `include/uomappp/*.h`)
 
+- `pipeline` — the generation **harness**: `pipeline_run(cfg)` drives the fixed
+               pass order (tiledata → `terrain_generate` → `mapwriter` →
+               `statics` → final preview → `mapdef` → `install`). `main.c` only
+               parses config and calls this. New library passes slot in here.
 - `config`   — defaults, config-file parse, presets, validation. No env vars.
-- `io`       — explicit little-endian byte writers + path/dir helpers. **Never
-               `fwrite` raw structs** (would leak host endianness/padding).
+               Pipeline keys: `pass_previews`, `pass_preview_dir`, `install_dir`.
+- `io`       — explicit little-endian byte writers + path/dir helpers + a
+               byte-for-byte `io_copy_file`. **Never `fwrite` raw structs**
+               (would leak host endianness/padding).
 - `noise`    — FastNoiseLite wrapper; the ONE unit that defines `FNL_IMPL`.
                splitmix64-derived per-layer seeds from the master seed (salts in
                `noise.h`, incl. elevation/moisture/continent/temperature/meander/
@@ -80,18 +86,27 @@ out/                      generated output (NOT committed)
 - `biome`    — climate-band biome classification (temperature-by-latitude +
                moisture + elevation) and the per-biome **land-tile palette**
                (varied by a per-cell hash). `biome.c` is where land tiles live.
-- `terrain`  — the pipeline: elevation/continent fields → land/water → biomes,
-               then passes for mountains, **rivers** (meander, fords, lakes),
-               **beaches** (sloped coasts), **mountain passes**, and slope-limit.
-               Continent shaping = elevation noise − radial falloff (organic).
+- `terrain`  — the terrain passes: elevation/continent fields → land/water →
+               biomes, then passes for mountains, **rivers** (meander, fords,
+               lakes), **beaches** (sloped coasts), **mountain passes**, and
+               slope-limit. Continent shaping = elevation noise − radial falloff.
+               Owns `terrain_grid`, the shared pass state: final `id/z/cat` plus
+               reusable float layers (`hfield` populated now; `moisture`,
+               `temperature`, `region`, `flags` reserved/NULL until a later pass
+               allocates them). Emits a per-pass PNG via `preview_pass` after
+               each stage.
 - `vegetation`— deterministic per-cell static placement by biome (trees, cacti,
                reeds, boulders, plants); the curated static-ID sets live here.
 - `mapwriter`— writes `mapN.mul` in the client's column-major block layout.
 - `statics`  — writes `staidxN.mul` + `staticsN.mul`: streams the vegetation
                records grouped per block with correct index offsets. Empty
                blocks → `(-1,-1,-1)`. **Towns/POI will add records here too.**
-- `preview`  — optional top-down PNG via stb (per-biome colors).
+- `preview`  — top-down PNG via stb (per-biome colors). `preview_write_png` for
+               a single image; `preview_pass` writes numbered `pass<NN>_<name>.png`
+               snapshots (diagnostic only — never affects `.mul` bytes).
 - `mapdef`   — emits `map-definitions.snippet.json` for ModernUO.
+- `install`  — final step: copies the `.mul` triplet from `out_dir` into
+               `install_dir` (the dir UOFiddler/ModernUO loads). No-op if unset.
 
 ## UO `.mul` byte format (what the writers must honor)
 
@@ -162,11 +177,12 @@ in a fixed order by the pipeline orchestrator, each emitting a per-pass PNG:
 
 0. ✅ Fork hygiene: rename `uomapgen` → `uomappp`, `include/uomappp/`,
    `project(UOMapPlusPlus)`; public repo `xor-droid/UOMapPlusPlus`.
-3. ⬜ **Phase 1 — Framework:** shared float layers on `terrain_grid`
-   (`height`/`moisture`/`temperature`/`region`/`flags`); pass contract +
-   `pipeline_run`; per-pass PNG; namespaced config/CLI + per-pass toggles;
-   `install` resource-swap into the UOFiddler data dir. Existing terrain
-   refactored into passes with **byte-identical output preserved** (sha256 gate).
+3. ✅ **Phase 1 — Framework:** shared float layers on `terrain_grid`
+   (`hfield` live; `moisture`/`temperature`/`region`/`flags` reserved);
+   `pipeline_run` harness; per-pass PNG (`preview_pass`); config/CLI for
+   previews + `install` resource-swap into the UOFiddler data dir. Existing
+   terrain refactored behind the pipeline with **byte-identical output
+   preserved** (sha256 gate, default + continents/mountains/rivers configs).
 4. ⬜ **Phase 2 — Terrain realism:** hydraulic erosion (droplet) +
    distance-transform/mask utilities (SciPy/NumPy algorithms reimplemented in C);
    erosion-driven drainage feeding rivers.

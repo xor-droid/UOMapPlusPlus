@@ -46,11 +46,14 @@ void config_defaults(mapgen_config *cfg) {
     cfg->passes             = 1;
     cfg->emit_mapdef = 0;
     cfg->terrain_only = 0;
+    cfg->emit_pass_previews = 0;
     snprintf(cfg->out_dir, sizeof(cfg->out_dir), "%s", "./out");
     snprintf(cfg->tiledata_path, sizeof(cfg->tiledata_path), "%s",
              "./ref/UONewDawn/tiledata.mul");
-    cfg->preview_path[0] = '\0';
-    cfg->config_path[0]  = '\0';
+    cfg->preview_path[0]     = '\0';
+    cfg->pass_preview_dir[0] = '\0';
+    cfg->install_dir[0]      = '\0';
+    cfg->config_path[0]      = '\0';
 }
 
 static int parse_bool(const char *v, int *out) {
@@ -157,6 +160,12 @@ int config_set_kv(mapgen_config *cfg, const char *key_in, const char *val) {
         if (parse_bool(val, &cfg->emit_mapdef) != 0) return -1;
     } else if (!strcmp(key, "terrain_only")) {
         if (parse_bool(val, &cfg->terrain_only) != 0) return -1;
+    } else if (!strcmp(key, "pass_previews")) {
+        if (parse_bool(val, &cfg->emit_pass_previews) != 0) return -1;
+    } else if (!strcmp(key, "pass_preview_dir")) {
+        snprintf(cfg->pass_preview_dir, sizeof(cfg->pass_preview_dir), "%s", val);
+    } else if (!strcmp(key, "install_dir")) {
+        snprintf(cfg->install_dir, sizeof(cfg->install_dir), "%s", val);
     } else if (!strcmp(key, "preset")) {
         return config_apply_preset(cfg, val);
     } else {

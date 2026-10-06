@@ -33,6 +33,8 @@ add_executable(uomappp
   src/statics.c
   src/preview.c
   src/mapdef.c
+  src/pipeline.c
+  src/install.c
 )
 
 target_include_directories(uomappp PRIVATE
