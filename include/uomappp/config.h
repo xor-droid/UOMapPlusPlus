@@ -82,6 +82,7 @@ typedef struct {
     int      connect;       /* bool: connect cut-off land via passes/bridges */
     int      connect_max;        /* max barrier-crossing cost (caps bridge length) */
     int      pass_width;         /* carved pass/causeway half-width (natural valleys) */
+    int      pass_slope;         /* foothill band width grading rock down to the valley (0=cliff) */
     int      clearings;     /* bool: reserve flat vegetation-free building plots */
     int      clearing_spacing;   /* min distance between clearings (Poisson radius) */
     int      clearing_size;      /* clearing radius in tiles */

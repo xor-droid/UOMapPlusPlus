@@ -1355,6 +1355,10 @@ static void connect_pass(terrain_grid *g, const mapgen_config *cfg) {
     /* Low-frequency noise so valleys meander and vary in width (organic, not a
      * straight carved line). */
     noise_layer *pn = noise_layer_create(cfg->seed, NOISE_LAYER_PASS, 0.03, 2);
+    /* Snapshot original z so the foothill grading ramps toward each cell's true
+     * mountain height (no cascade as overlapping passes lower cells). */
+    int8_t *zorig = (int8_t *)malloc(N);
+    if (zorig) memcpy(zorig, g->z, N);
     long connected = 0, carved = 0;
     for (long e = 0; uf && e < ne; ++e) {
         if (E[e].cost > MAXC) break;
@@ -1375,6 +1379,7 @@ static void connect_pass(terrain_grid *g, const mapgen_config *cfg) {
                  * noise so it wanders and its edges are irregular -- natural, not a
                  * straight line. */
                 const int PW = cfg->pass_width > 0 ? cfg->pass_width : 6;
+                const int SLOPE = cfg->pass_slope > 0 ? cfg->pass_slope : 0;
                 double mx = pn ? noise_layer_sample(pn, bx, by) : 0.0;
                 double my = pn ? noise_layer_sample(pn, bx + 3001, by + 1511) : 0.0;
                 double nr = pn ? noise_layer_sample(pn, bx + 911, by + 8017) : 0.0;
@@ -1382,28 +1387,39 @@ static void connect_pass(terrain_grid *g, const mapgen_config *cfg) {
                 int cym = by + (int)lround(my * (double)PW * 0.8);
                 int rad = (int)lround((double)PW * (0.65 + 0.55 * (nr * 0.5 + 0.5)));
                 if (rad < 2) rad = 2;
-                for (int dy = -rad; dy <= rad; ++dy)
-                    for (int dx = -rad; dx <= rad; ++dx) {
+                int outer = rad + SLOPE;
+                for (int dy = -outer; dy <= outer; ++dy)
+                    for (int dx = -outer; dx <= outer; ++dx) {
                         int r2 = dx * dx + dy * dy;
-                        if (r2 > rad * rad) continue;
+                        if (r2 > outer * outer) continue;
                         int nx = cxm + dx, ny = cym + dy;
                         if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
                         size_t i = (size_t)nx + (size_t)ny * W;
                         int cc = g->cat[i];
-                        if (cc == TCAT_MOUNTAIN) {
-                            if (r2 <= 4) {                        /* dirt trail down the valley */
-                                g->cat[i] = (uint8_t)TCAT_PASS;
-                                g->id[i] = tile_for_cat(TCAT_HILL);
-                            } else {                              /* grassy valley floor */
-                                g->cat[i] = (uint8_t)TCAT_GRASS;
-                                g->id[i] = biome_tile(TCAT_GRASS,
-                                           cell_hash(cfg->seed, nx, ny, NOISE_LAYER_BIOME));
+                        if (r2 <= rad * rad) {                    /* the valley itself */
+                            if (cc == TCAT_MOUNTAIN) {
+                                if (r2 <= 4) {                    /* dirt trail down the middle */
+                                    g->cat[i] = (uint8_t)TCAT_PASS;
+                                    g->id[i] = tile_for_cat(TCAT_HILL);
+                                } else {                          /* grassy valley floor */
+                                    g->cat[i] = (uint8_t)TCAT_GRASS;
+                                    g->id[i] = biome_tile(TCAT_GRASS,
+                                               cell_hash(cfg->seed, nx, ny, NOISE_LAYER_BIOME));
+                                }
+                                g->z[i] = (int8_t)clampi(zc, -128, 127);
+                            } else if (IS_WATER_CAT(cc)) {
+                                int wz = zc > cfg->water_z + 1 ? zc : cfg->water_z + 1;
+                                g->cat[i] = (uint8_t)TCAT_BRIDGE; g->id[i] = TILE_SAND;
+                                g->z[i] = (int8_t)clampi(wz, -128, 127);
                             }
-                            g->z[i] = (int8_t)clampi(zc, -128, 127);
-                        } else if (IS_WATER_CAT(cc)) {
-                            int wz = zc > cfg->water_z + 1 ? zc : cfg->water_z + 1;
-                            g->cat[i] = (uint8_t)TCAT_BRIDGE; g->id[i] = TILE_SAND;
-                            g->z[i] = (int8_t)clampi(wz, -128, 127);
+                        } else if (SLOPE > 0 && zorig && cc == TCAT_MOUNTAIN) {
+                            /* Foothill shoulder: ramp the rock down to the valley
+                             * floor (keep it rock, just lower z) for a graded edge. */
+                            double f = (sqrt((double)r2) - (double)rad) / (double)SLOPE;
+                            if (f < 0.0) f = 0.0;
+                            if (f > 1.0) f = 1.0;
+                            int target = (int)lround((double)zc + f * ((double)zorig[i] - (double)zc));
+                            if (target < g->z[i]) g->z[i] = (int8_t)clampi(target, -128, 127);
                         }
                     }
                 ++carved;
@@ -1414,6 +1430,7 @@ static void connect_pass(terrain_grid *g, const mapgen_config *cfg) {
             ncomp, connected, carved);
 
     free(bt); free(comp); free(dist); free(prev); free(nxt); free(head); free(E); free(uf);
+    free(zorig);
     noise_layer_free(pn);
 }
 

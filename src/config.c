@@ -75,6 +75,7 @@ void config_defaults(mapgen_config *cfg) {
     cfg->connect            = 0;
     cfg->connect_max        = 6000;  /* cost budget: mountains/inland water bridge generously, open ocean does not */
     cfg->pass_width         = 6;     /* ~12-tile-wide grassy valleys, not 1-tile scars */
+    cfg->pass_slope         = 8;     /* foothill band grading mountain rock down to the valley */
     cfg->clearings          = 0;
     cfg->clearing_spacing   = 140;
     cfg->clearing_size      = 10;
@@ -248,6 +249,8 @@ int config_set_kv(mapgen_config *cfg, const char *key_in, const char *val) {
         cfg->connect_max = (int)strtol(val, NULL, 0);
     } else if (!strcmp(key, "pass_width")) {
         cfg->connect = 1; cfg->pass_width = (int)strtol(val, NULL, 0);
+    } else if (!strcmp(key, "pass_slope")) {
+        cfg->connect = 1; cfg->pass_slope = (int)strtol(val, NULL, 0);
     } else if (!strcmp(key, "clearings")) {
         if (parse_bool(val, &cfg->clearings) != 0) return -1;
     } else if (!strcmp(key, "clearing_spacing")) {
@@ -442,6 +445,7 @@ int config_dump(const mapgen_config *cfg, const char *path) {
     fprintf(f, "plain_z = %d\n", cfg->plain_z);
     fprintf(f, "connect_max = %d\n", cfg->connect_max);
     fprintf(f, "pass_width = %d\n", cfg->pass_width);
+    fprintf(f, "pass_slope = %d\n", cfg->pass_slope);
     fprintf(f, "clearing_spacing = %d\n", cfg->clearing_spacing);
     fprintf(f, "clearing_size = %d\n", cfg->clearing_size);
     fprintf(f, "out = %s\n", cfg->out_dir);
@@ -610,6 +614,9 @@ int config_validate(const mapgen_config *cfg) {
     }
     if (cfg->connect && (cfg->pass_width < 1 || cfg->pass_width > 32)) {
         fprintf(stderr, "error: pass-width (%d) must be in 1..32\n", cfg->pass_width); ok = 0;
+    }
+    if (cfg->connect && (cfg->pass_slope < 0 || cfg->pass_slope > 64)) {
+        fprintf(stderr, "error: pass-slope (%d) must be in 0..64\n", cfg->pass_slope); ok = 0;
     }
     if (cfg->clearings) {
         if (cfg->clearing_spacing < 16) {

@@ -73,6 +73,7 @@ enum {
     OPT_CONNECT,
     OPT_CONNECT_MAX,
     OPT_PASS_WIDTH,
+    OPT_PASS_SLOPE,
     OPT_CLEARINGS,
     OPT_CLEARING_SPACING,
     OPT_CLEARING_SIZE,
@@ -170,6 +171,8 @@ static void print_help(const char *argv0) {
 "                            (default 6000; keeps the open ocean between continents).\n"
 "  --pass-width <n>          Half-width of carved passes/causeways; bigger = wider\n"
 "                            natural grassy valleys (default 6 = ~12 tiles wide).\n"
+"  --pass-slope <n>          Foothill band width grading mountain rock down to\n"
+"                            the valley (default 8; 0 = sharp cliff edges).\n"
 "  --clearings               Reserve flat, vegetation-free building plots.\n"
 "  --clearing-spacing <n>    Min distance between clearings (default 140).\n"
 "  --clearing-size <n>       Clearing radius in tiles (default 10).\n"
@@ -308,6 +311,7 @@ int main(int argc, char **argv) {
         { "connect",           no_argument,       0, OPT_CONNECT },
         { "connect-max",       required_argument, 0, OPT_CONNECT_MAX },
         { "pass-width",        required_argument, 0, OPT_PASS_WIDTH },
+        { "pass-slope",        required_argument, 0, OPT_PASS_SLOPE },
         { "clearings",         no_argument,       0, OPT_CLEARINGS },
         { "clearing-spacing",  required_argument, 0, OPT_CLEARING_SPACING },
         { "clearing-size",     required_argument, 0, OPT_CLEARING_SIZE },
@@ -395,6 +399,7 @@ int main(int argc, char **argv) {
             case OPT_CONNECT:      cfg.connect = 1; break;
             case OPT_CONNECT_MAX:  cfg.connect = 1; cfg.connect_max = (int)strtol(optarg, NULL, 0); break;
             case OPT_PASS_WIDTH:   cfg.connect = 1; cfg.pass_width = (int)strtol(optarg, NULL, 0); break;
+            case OPT_PASS_SLOPE:   cfg.connect = 1; cfg.pass_slope = (int)strtol(optarg, NULL, 0); break;
             case OPT_CLEARINGS:    cfg.clearings = 1; break;
             case OPT_CLEARING_SPACING: cfg.clearings = 1; cfg.clearing_spacing = (int)strtol(optarg, NULL, 0); break;
             case OPT_CLEARING_SIZE:    cfg.clearings = 1; cfg.clearing_size = (int)strtol(optarg, NULL, 0); break;
