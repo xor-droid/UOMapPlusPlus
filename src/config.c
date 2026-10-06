@@ -82,6 +82,7 @@ void config_defaults(mapgen_config *cfg) {
     cfg->pass_preview_dir[0] = '\0';
     cfg->install_dir[0]      = '\0';
     cfg->config_path[0]      = '\0';
+    cfg->dump_config_path[0] = '\0';
 }
 
 static int parse_bool(const char *v, int *out) {
@@ -364,6 +365,103 @@ int config_apply_preset(mapgen_config *cfg, const char *name) {
     }
     fprintf(stderr, "error: unknown preset '%s' (use 'test', 'felucca' or 'britannia')\n", name);
     return -1;
+}
+
+int config_dump(const mapgen_config *cfg, const char *path) {
+    if (!path || path[0] == '\0')
+        return 0;
+    FILE *f = fopen(path, "w");
+    if (!f) {
+        fprintf(stderr, "error: cannot write config dump '%s'\n", path);
+        return -1;
+    }
+    fprintf(f, "# uomappp resolved config (defaults + config file + CLI, preset expanded).\n");
+    fprintf(f, "# Reproduce this exact map (same build) with:  uomappp --config <this-file>\n\n");
+
+    /* Scalars / params first. */
+    fprintf(f, "seed = %llu\n", (unsigned long long)cfg->seed);
+    fprintf(f, "map = %d\n", cfg->map_index);
+    fprintf(f, "width = %d\n", cfg->width);
+    fprintf(f, "height = %d\n", cfg->height);
+    fprintf(f, "sea_level = %.9g\n", cfg->sea_level);
+    fprintf(f, "frequency = %.9g\n", cfg->frequency);
+    fprintf(f, "octaves = %d\n", cfg->octaves);
+    fprintf(f, "max_slope = %d\n", cfg->max_slope);
+    fprintf(f, "land_z_max = %d\n", cfg->land_z_max);
+    fprintf(f, "water_z = %d\n", cfg->water_z);
+    fprintf(f, "continent_radius = %.9g\n", cfg->continent_radius);
+    fprintf(f, "continent_strength = %.9g\n", cfg->continent_strength);
+    fprintf(f, "continent_power = %.9g\n", cfg->continent_power);
+    fprintf(f, "continent_count = %d\n", cfg->continent_count);
+    fprintf(f, "continent_scale = %.9g\n", cfg->continent_scale);
+    fprintf(f, "continent_fill = %.9g\n", cfg->continent_fill);
+    fprintf(f, "flat_z = %d\n", cfg->flat_z);
+    fprintf(f, "mountain_level = %.9g\n", cfg->mountain_level);
+    fprintf(f, "mountain_z = %d\n", cfg->mountain_z);
+    fprintf(f, "mountain_scale = %.9g\n", cfg->mountain_scale);
+    fprintf(f, "river_density = %d\n", cfg->river_density);
+    fprintf(f, "temperature_bias = %.9g\n", cfg->temperature_bias);
+    fprintf(f, "tree_density = %.9g\n", cfg->tree_density);
+    fprintf(f, "rock_density = %.9g\n", cfg->rock_density);
+    fprintf(f, "plant_density = %.9g\n", cfg->plant_density);
+    fprintf(f, "beach_width = %d\n", cfg->beach_width);
+    fprintf(f, "erosion_density = %.9g\n", cfg->erosion_density);
+    fprintf(f, "erosion_lifetime = %d\n", cfg->erosion_lifetime);
+    fprintf(f, "erosion_radius = %d\n", cfg->erosion_radius);
+    fprintf(f, "erosion_erode = %.9g\n", cfg->erosion_erode);
+    fprintf(f, "erosion_deposition = %.9g\n", cfg->erosion_deposition);
+    fprintf(f, "erosion_z_scale = %.9g\n", cfg->erosion_z_scale);
+    fprintf(f, "region_spacing = %d\n", cfg->region_spacing);
+    fprintf(f, "region_jitter = %.9g\n", cfg->region_jitter);
+    fprintf(f, "region_warp = %.9g\n", cfg->region_warp);
+    fprintf(f, "cellular_fill = %.9g\n", cfg->cellular_fill);
+    fprintf(f, "cellular_iterations = %d\n", cfg->cellular_iterations);
+    fprintf(f, "town_spacing = %d\n", cfg->town_spacing);
+    fprintf(f, "town_size = %d\n", cfg->town_size);
+    fprintf(f, "dither_strength = %.9g\n", cfg->dither_strength);
+    fprintf(f, "resource_spacing = %d\n", cfg->resource_spacing);
+    fprintf(f, "terrace_step = %d\n", cfg->terrace_step);
+    fprintf(f, "plain_z = %d\n", cfg->plain_z);
+    fprintf(f, "out = %s\n", cfg->out_dir);
+    fprintf(f, "tiledata = %s\n", cfg->tiledata_path);
+    if (cfg->preview_path[0])     fprintf(f, "preview = %s\n", cfg->preview_path);
+    if (cfg->pass_preview_dir[0]) fprintf(f, "pass_preview_dir = %s\n", cfg->pass_preview_dir);
+    /* install_dir intentionally omitted: it is an output side-action, not part of
+     * the map; re-run with --install-dir if you want to swap files again. */
+
+    /* Booleans LAST so that keys which imply a toggle on read (continent_count/
+     * scale/fill => continents, wfc => regions) are overridden by the explicit
+     * value here, giving a faithful round-trip. */
+    fprintf(f, "\n");
+    fprintf(f, "continent = %s\n",    cfg->continent ? "true" : "false");
+    fprintf(f, "continents = %s\n",   cfg->continents ? "true" : "false");
+    fprintf(f, "flat = %s\n",         cfg->flat ? "true" : "false");
+    fprintf(f, "mountains = %s\n",    cfg->mountains ? "true" : "false");
+    fprintf(f, "rivers = %s\n",       cfg->rivers ? "true" : "false");
+    fprintf(f, "biomes = %s\n",       cfg->biomes ? "true" : "false");
+    fprintf(f, "vegetation = %s\n",   cfg->vegetation ? "true" : "false");
+    fprintf(f, "beaches = %s\n",      cfg->beaches ? "true" : "false");
+    fprintf(f, "lakes = %s\n",        cfg->lakes ? "true" : "false");
+    fprintf(f, "passes = %s\n",       cfg->passes ? "true" : "false");
+    fprintf(f, "erosion = %s\n",      cfg->erosion ? "true" : "false");
+    fprintf(f, "regions = %s\n",      cfg->regions ? "true" : "false");
+    fprintf(f, "wfc = %s\n",          cfg->wfc ? "true" : "false");
+    fprintf(f, "cellular = %s\n",     cfg->cellular ? "true" : "false");
+    fprintf(f, "towns = %s\n",        cfg->towns ? "true" : "false");
+    fprintf(f, "trails = %s\n",       cfg->trails ? "true" : "false");
+    fprintf(f, "dither = %s\n",       cfg->dither ? "true" : "false");
+    fprintf(f, "resources = %s\n",    cfg->resources ? "true" : "false");
+    fprintf(f, "cliffs = %s\n",       cfg->cliffs ? "true" : "false");
+    fprintf(f, "terrace = %s\n",      cfg->terrace ? "true" : "false");
+    fprintf(f, "emit_mapdef = %s\n",  cfg->emit_mapdef ? "true" : "false");
+    fprintf(f, "terrain_only = %s\n", cfg->terrain_only ? "true" : "false");
+    fprintf(f, "pass_previews = %s\n", cfg->emit_pass_previews ? "true" : "false");
+
+    if (fclose(f) != 0) {
+        fprintf(stderr, "error: failed writing config dump '%s'\n", path);
+        return -1;
+    }
+    return 0;
 }
 
 int config_validate(const mapgen_config *cfg) {

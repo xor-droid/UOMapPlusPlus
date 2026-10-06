@@ -72,7 +72,8 @@ enum {
     OPT_PLAIN_Z,
     OPT_PASS_PREVIEWS,
     OPT_PASS_PREVIEW_DIR,
-    OPT_INSTALL_DIR
+    OPT_INSTALL_DIR,
+    OPT_DUMP_CONFIG
 };
 
 static void print_version(void) {
@@ -176,6 +177,8 @@ static void print_help(const char *argv0) {
 "                            implies --pass-previews).\n"
 "  --install-dir <dir>   Copy the final .mul triplet into dir (the directory\n"
 "                        UOFiddler/ModernUO loads), overwriting any files there.\n"
+"  --dump-config <file>  Write the fully-resolved config (preset + file + flags)\n"
+"                        to file; `--config file` then reproduces this map.\n"
 "  --emit-mapdef         Also write map-definitions.snippet.json for ModernUO.\n"
 "  --terrain-only        Write only map<N>.mul (skip staidx/statics).\n"
 "  --help                Show this help and exit.\n"
@@ -292,6 +295,7 @@ int main(int argc, char **argv) {
         { "pass-previews",    no_argument,       0, OPT_PASS_PREVIEWS },
         { "pass-preview-dir", required_argument, 0, OPT_PASS_PREVIEW_DIR },
         { "install-dir",      required_argument, 0, OPT_INSTALL_DIR },
+        { "dump-config",      required_argument, 0, OPT_DUMP_CONFIG },
         { "emit-mapdef", no_argument,       0, 'M' },
         { "terrain-only",no_argument,       0, 't' },
         { "help",        no_argument,       0, 'h' },
@@ -377,6 +381,9 @@ int main(int argc, char **argv) {
             case OPT_INSTALL_DIR:
                 snprintf(cfg.install_dir, sizeof(cfg.install_dir), "%s", optarg);
                 break;
+            case OPT_DUMP_CONFIG:
+                snprintf(cfg.dump_config_path, sizeof(cfg.dump_config_path), "%s", optarg);
+                break;
             case 'M': cfg.emit_mapdef = 1; break;
             case 't': cfg.terrain_only = 1; break;
             case 'h': print_help(argv[0]); return 0;
@@ -387,6 +394,10 @@ int main(int argc, char **argv) {
 
     if (config_validate(&cfg) != 0)
         return 2;
+
+    /* Write the fully-resolved config if requested (reflects preset + file + CLI). */
+    if (config_dump(&cfg, cfg.dump_config_path) != 0)
+        return 1;
 
     if (io_ensure_dir(cfg.out_dir) != 0) {
         fprintf(stderr, "error: cannot create output directory '%s'\n", cfg.out_dir);

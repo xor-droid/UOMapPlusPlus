@@ -88,6 +88,7 @@ typedef struct {
     char     pass_preview_dir[UOMG_PATH_MAX];  /* dir for pass PNGs (empty => out_dir) */
     char     install_dir[UOMG_PATH_MAX];       /* copy final .mul triplet here (empty => skip) */
     char     config_path[UOMG_PATH_MAX];       /* empty string = none */
+    char     dump_config_path[UOMG_PATH_MAX];  /* write resolved config here (empty => skip) */
 } mapgen_config;
 
 /* Fill cfg with built-in defaults. */
@@ -108,5 +109,11 @@ int config_set_kv(mapgen_config *cfg, const char *key, const char *val);
 /* Validate ranges (dims multiple of 8 and > 0, octaves > 0, etc.).
  * Returns 0 on success, -1 on error (message to stderr). */
 int config_validate(const mapgen_config *cfg);
+
+/* Write the fully-resolved config (defaults + file + CLI, after a preset is
+ * expanded) to path as INI "key = value" lines that config_load_file reads
+ * back. Running `--config <path>` then reproduces this exact map. Returns 0 on
+ * success (incl. empty path = no-op), -1 on write error. */
+int config_dump(const mapgen_config *cfg, const char *path);
 
 #endif /* UOMAPGEN_CONFIG_H */
