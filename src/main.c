@@ -60,6 +60,11 @@ enum {
     OPT_TOWN_SPACING,
     OPT_TOWN_SIZE,
     OPT_NO_TRAILS,
+    OPT_REGION_WARP,
+    OPT_DITHER,
+    OPT_DITHER_STRENGTH,
+    OPT_RESOURCES,
+    OPT_RESOURCE_SPACING,
     OPT_PASS_PREVIEWS,
     OPT_PASS_PREVIEW_DIR,
     OPT_INSTALL_DIR
@@ -132,6 +137,13 @@ static void print_help(const char *argv0) {
 "  --town-spacing <n>        Min distance between towns in tiles (default 160).\n"
 "  --town-size <n>           Town footprint size in tiles (default 48).\n"
 "  --no-trails               Skip the L-system side-trails from towns.\n"
+"  Detail/polish:\n"
+"  --region-warp <f>         Voronoi border domain-warp amplitude in tiles\n"
+"                            (organic borders; default 12, 0 = crisp polygons).\n"
+"  --dither                  Stipple biome borders into soft transitions.\n"
+"  --dither-strength <f>     Fraction of border cells to swap, [0,1] (default 0.35).\n"
+"  --resources               Poisson-disc resource (ore) nodes on hills/foothills.\n"
+"  --resource-spacing <n>    Min distance between resource nodes (default 120).\n"
 "  Enrichment (all ON by default; use the --no-* flags to disable):\n"
 "  --no-biomes               Disable climate biomes (snow/desert/jungle/swamp).\n"
 "  --temperature-bias <f>    Shift climate warmer(+)/colder(-) (default 0).\n"
@@ -252,6 +264,11 @@ int main(int argc, char **argv) {
         { "town-spacing",      required_argument, 0, OPT_TOWN_SPACING },
         { "town-size",         required_argument, 0, OPT_TOWN_SIZE },
         { "no-trails",         no_argument,       0, OPT_NO_TRAILS },
+        { "region-warp",       required_argument, 0, OPT_REGION_WARP },
+        { "dither",            no_argument,       0, OPT_DITHER },
+        { "dither-strength",   required_argument, 0, OPT_DITHER_STRENGTH },
+        { "resources",         no_argument,       0, OPT_RESOURCES },
+        { "resource-spacing",  required_argument, 0, OPT_RESOURCE_SPACING },
         { "tiledata",    required_argument, 0, 'T' },
         { "preview",     required_argument, 0, 'P' },
         { "pass-previews",    no_argument,       0, OPT_PASS_PREVIEWS },
@@ -322,6 +339,11 @@ int main(int argc, char **argv) {
             case OPT_TOWN_SPACING: cfg.towns = 1; cfg.town_spacing = (int)strtol(optarg, NULL, 0); break;
             case OPT_TOWN_SIZE:    cfg.towns = 1; cfg.town_size = (int)strtol(optarg, NULL, 0); break;
             case OPT_NO_TRAILS:    cfg.trails = 0; break;
+            case OPT_REGION_WARP:  cfg.region_warp = strtod(optarg, NULL); break;
+            case OPT_DITHER:       cfg.dither = 1; break;
+            case OPT_DITHER_STRENGTH: cfg.dither = 1; cfg.dither_strength = strtod(optarg, NULL); break;
+            case OPT_RESOURCES:    cfg.resources = 1; break;
+            case OPT_RESOURCE_SPACING: cfg.resources = 1; cfg.resource_spacing = (int)strtol(optarg, NULL, 0); break;
             case 'T': snprintf(cfg.tiledata_path, sizeof(cfg.tiledata_path), "%s", optarg); break;
             case 'P': snprintf(cfg.preview_path, sizeof(cfg.preview_path), "%s", optarg); break;
             case OPT_PASS_PREVIEWS: cfg.emit_pass_previews = 1; break;

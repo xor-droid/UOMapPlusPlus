@@ -30,10 +30,14 @@ typedef struct {
 
 /* Build the diagram and fill region[] (W*H) with each cell's nearest-site id in
  * [0,n). seed/spacing/jitter drive the layout (jitter in [0,1] = fraction of a
- * cell). Returns 0 on success, -1 on allocation failure. Free with
- * voronoi_free(). */
+ * cell). When warp_amp > 0 the per-cell nearest-site query point is displaced by
+ * an OpenSimplex domain-warp of that amplitude (tiles) at warp_freq, so the
+ * territory borders wiggle organically instead of reading as straight polygon
+ * edges. Site positions are unaffected by the warp. Returns 0 on success, -1 on
+ * allocation failure. Free with voronoi_free(). */
 int voronoi_build(voronoi_diagram *vd, int32_t *region, int W, int H,
-                  uint64_t seed, int spacing, double jitter);
+                  uint64_t seed, int spacing, double jitter,
+                  double warp_amp, double warp_freq);
 
 void voronoi_free(voronoi_diagram *vd);
 

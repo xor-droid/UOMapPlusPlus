@@ -62,6 +62,11 @@ void config_defaults(mapgen_config *cfg) {
     cfg->town_spacing       = 160;
     cfg->town_size          = 48;
     cfg->trails             = 1;     /* active only when towns is on */
+    cfg->region_warp        = 12.0;  /* organic Voronoi borders by default (0 = crisp) */
+    cfg->dither             = 0;
+    cfg->dither_strength    = 0.35;
+    cfg->resources          = 0;
+    cfg->resource_spacing   = 120;
     cfg->emit_mapdef = 0;
     cfg->terrain_only = 0;
     cfg->emit_pass_previews = 0;
@@ -205,6 +210,16 @@ int config_set_kv(mapgen_config *cfg, const char *key_in, const char *val) {
         cfg->town_size = (int)strtol(val, NULL, 0);
     } else if (!strcmp(key, "trails")) {
         if (parse_bool(val, &cfg->trails) != 0) return -1;
+    } else if (!strcmp(key, "region_warp")) {
+        cfg->region_warp = strtod(val, NULL);
+    } else if (!strcmp(key, "dither")) {
+        if (parse_bool(val, &cfg->dither) != 0) return -1;
+    } else if (!strcmp(key, "dither_strength")) {
+        cfg->dither_strength = strtod(val, NULL);
+    } else if (!strcmp(key, "resources")) {
+        if (parse_bool(val, &cfg->resources) != 0) return -1;
+    } else if (!strcmp(key, "resource_spacing")) {
+        cfg->resource_spacing = (int)strtol(val, NULL, 0);
     } else if (!strcmp(key, "out")) {
         snprintf(cfg->out_dir, sizeof(cfg->out_dir), "%s", val);
     } else if (!strcmp(key, "tiledata")) {
@@ -402,6 +417,15 @@ int config_validate(const mapgen_config *cfg) {
         if (cfg->town_size < 12 || cfg->town_size > 512) {
             fprintf(stderr, "error: town-size (%d) must be in 12..512\n", cfg->town_size); ok = 0;
         }
+    }
+    if (cfg->region_warp < 0.0) {
+        fprintf(stderr, "error: region-warp (%g) must be >= 0\n", cfg->region_warp); ok = 0;
+    }
+    if (cfg->dither && (cfg->dither_strength < 0.0 || cfg->dither_strength > 1.0)) {
+        fprintf(stderr, "error: dither-strength (%g) must be in [0,1]\n", cfg->dither_strength); ok = 0;
+    }
+    if (cfg->resources && cfg->resource_spacing < 8) {
+        fprintf(stderr, "error: resource-spacing (%d) must be >= 8\n", cfg->resource_spacing); ok = 0;
     }
     if (cfg->continent) {
         if (cfg->continent_radius < 0.0 || cfg->continent_radius >= 1.0) {

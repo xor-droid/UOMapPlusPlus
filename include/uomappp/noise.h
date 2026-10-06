@@ -32,7 +32,10 @@ enum {
     NOISE_LAYER_POISSON   = 0x0D,  /* Poisson-disc sampling (town sites) */
     NOISE_LAYER_LSYSTEM   = 0x0E,  /* L-system trail branching */
     NOISE_LAYER_BSP       = 0x0F,  /* BSP partition split choices */
-    NOISE_LAYER_TOWN      = 0x10   /* town-pass misc jitter */
+    NOISE_LAYER_TOWN      = 0x10,  /* town-pass misc jitter */
+    NOISE_LAYER_WARP      = 0x11,  /* Voronoi boundary domain-warp (x; y uses +0x1000) */
+    NOISE_LAYER_RESOURCE  = 0x12,  /* Poisson-disc resource node placement */
+    NOISE_LAYER_DITHER    = 0x13   /* biome-border dithering */
 };
 
 /* splitmix64: fixed, portable 64-bit mixer used for seed derivation. */

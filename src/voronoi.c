@@ -8,13 +8,23 @@ static double u01(uint64_t *st) {
 }
 
 int voronoi_build(voronoi_diagram *vd, int32_t *region, int W, int H,
-                  uint64_t seed, int spacing, double jitter) {
+                  uint64_t seed, int spacing, double jitter,
+                  double warp_amp, double warp_freq) {
     if (W <= 0 || H <= 0)
         return -1;
     if (spacing < 1)
         spacing = 1;
     if (jitter < 0.0) jitter = 0.0;
     if (jitter > 1.0) jitter = 1.0;
+
+    /* Optional domain-warp fields for organic borders. */
+    noise_layer *wx = NULL, *wy = NULL;
+    if (warp_amp > 0.0) {
+        double f = warp_freq > 0.0 ? warp_freq : 0.01;
+        wx = noise_layer_create(seed, NOISE_LAYER_WARP, f, 3);
+        wy = noise_layer_create(seed, NOISE_LAYER_WARP + 0x1000u, f, 3);
+        if (!wx || !wy) { noise_layer_free(wx); noise_layer_free(wy); wx = wy = NULL; }
+    }
 
     const int gx = (W + spacing - 1) / spacing;
     const int gy = (H + spacing - 1) / spacing;
@@ -48,7 +58,16 @@ int voronoi_build(voronoi_diagram *vd, int32_t *region, int W, int H,
     const int R = 2;
     for (int y = 0; y < H; ++y)
         for (int x = 0; x < W; ++x) {
-            int a = x / spacing, b = y / spacing;
+            double qx = (double)x, qy = (double)y;
+            if (wx) {
+                qx += warp_amp * noise_layer_sample(wx, x, y);
+                qy += warp_amp * noise_layer_sample(wy, x, y);
+                if (qx < 0.0) qx = 0.0;
+                if (qx > W - 1) qx = W - 1;
+                if (qy < 0.0) qy = 0.0;
+                if (qy > H - 1) qy = H - 1;
+            }
+            int a = (int)qx / spacing, b = (int)qy / spacing;
             double best = 1e30;
             int bi = b * gx + a;
             for (int db = -R; db <= R; ++db)
@@ -56,13 +75,15 @@ int voronoi_build(voronoi_diagram *vd, int32_t *region, int W, int H,
                     int na = a + da, nb = b + db;
                     if (na < 0 || nb < 0 || na >= gx || nb >= gy) continue;
                     int id = nb * gx + na;
-                    double dx = (double)x - sites[id].x;
-                    double dy = (double)y - sites[id].y;
+                    double dx = qx - sites[id].x;
+                    double dy = qy - sites[id].y;
                     double d = dx * dx + dy * dy;
                     if (d < best) { best = d; bi = id; }
                 }
             region[(size_t)x + (size_t)y * W] = bi;
         }
+    noise_layer_free(wx);
+    noise_layer_free(wy);
 
     vd->sites = sites;
     vd->n = n;

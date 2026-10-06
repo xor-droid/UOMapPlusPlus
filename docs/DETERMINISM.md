@@ -17,10 +17,13 @@ a given seed/config**. A map is fully described by its seed and configuration.
    climate), `NOISE_LAYER_CELLULAR` (`0x0B`, cellular-automata random fill) and
    `NOISE_LAYER_WFC` (`0x0C`, WFC collapse choices), `NOISE_LAYER_POISSON`
    (`0x0D`, Poisson-disc town sites), `NOISE_LAYER_LSYSTEM` (`0x0E`, L-system
-   trail branching), `NOISE_LAYER_BSP` (`0x0F`, BSP splits) and
-   `NOISE_LAYER_TOWN` (`0x10`). The erosion/regions/wfc/cellular/towns passes are
-   all off by default; with them off, output is byte-identical to the pre-fork
-   builds. A* and MST use no RNG (fixed tie-breaks).
+   trail branching), `NOISE_LAYER_BSP` (`0x0F`, BSP splits), `NOISE_LAYER_TOWN`
+   (`0x10`), `NOISE_LAYER_WARP` (`0x11`, Voronoi boundary domain-warp; y uses
+   `+0x1000`), `NOISE_LAYER_RESOURCE` (`0x12`, Poisson resource nodes) and
+   `NOISE_LAYER_DITHER` (`0x13`, biome-border dithering). The erosion/regions/
+   wfc/cellular/towns/dither/resources passes are all off by default; with them
+   off, output is byte-identical to the pre-fork builds. A* and MST use no RNG
+   (fixed tie-breaks).
 3. **No nondeterministic inputs.** No `rand()`, no `time()`, no threads, and
    **no environment variables**. Configuration is CLI flags + optional file only.
 4. **Fixed iteration order.** Terrain generation and the slope-limiting passes

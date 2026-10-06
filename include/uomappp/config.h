@@ -69,6 +69,11 @@ typedef struct {
     int      town_spacing;       /* min distance between towns (Poisson radius) */
     int      town_size;          /* town footprint size in tiles */
     int      trails;             /* bool: L-system side-trails from towns */
+    double   region_warp;        /* Voronoi boundary domain-warp amplitude (tiles; 0=crisp) */
+    int      dither;        /* bool: stipple biome borders into soft transitions */
+    double   dither_strength;    /* [0,1] fraction of border cells to swap */
+    int      resources;     /* bool: Poisson-disc resource (ore) nodes */
+    int      resource_spacing;   /* min distance between resource nodes (tiles) */
     int      emit_mapdef;   /* bool: also write map-definitions.snippet.json */
     int      terrain_only;  /* bool: write only mapN.mul (skip statics) */
     int      emit_pass_previews; /* bool: write a PNG snapshot after each pass */

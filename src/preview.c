@@ -27,6 +27,7 @@ static const rgb CAT_COLOR[TCAT_COUNT] = {
     [TCAT_BRIDGE]        = { 160, 110,  70 },
     [TCAT_FLOOR]         = { 190, 170, 140 },
     [TCAT_WALL]          = {  90,  80,  75 },
+    [TCAT_ORE]           = { 175, 145, 100 },
 };
 
 static unsigned char clampu8(int v) {

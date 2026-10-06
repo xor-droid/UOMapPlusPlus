@@ -32,6 +32,7 @@ enum {
     TCAT_BRIDGE,        /* road crossing a river */
     TCAT_FLOOR,         /* building floor */
     TCAT_WALL,          /* building wall */
+    TCAT_ORE,           /* resource/mineral node */
     TCAT_COUNT
 };
 

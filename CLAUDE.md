@@ -90,9 +90,11 @@ out/                      generated output (NOT committed)
                Droplets spawn from a splitmix64 stream keyed by
                `NOISE_LAYER_EROSION`; mountains keep their peaks.
 - `voronoi`  — raster (jittered-grid) **Voronoi territories**: sites + per-cell
-               nearest-site `region` label. Salt `NOISE_LAYER_VORONOI`. (We
-               compute the partition directly on the raster instead of vendoring
-               a polygon Voronoi lib.)
+               nearest-site `region` label, with an optional OpenSimplex
+               **boundary domain-warp** (`region_warp`) so borders read organic,
+               not polygonal. Salts `NOISE_LAYER_VORONOI` / `NOISE_LAYER_WARP`.
+               (We compute the partition directly on the raster instead of
+               vendoring a polygon Voronoi lib.)
 - `marching` — **marching-squares** boundary extraction: marks region/biome
                border cells (the raster 2×2 crossing test) into `g->flags`.
 - `mst`      — **minimum spanning tree** (Kruskal + union-find) over the
@@ -244,10 +246,13 @@ in a fixed order by the pipeline orchestrator, each emitting a per-pass PNG:
    deterministic when on. Rendered as terrain tiles; **follow-up:** render
    building walls as real statics (extend `statics.c`/`vegetation.c` record
    pipeline).
-8. ⬜ **Phase 6 — Detail:** Poisson-disc resource/vegetation placement;
-   **Voronoi boundary noise-warp** (displace region/biome borders with a noise
-   field so territories read organically instead of polygonal); biome-border
-   dithering; pixel-authentic cliff-face mountains; final PNG + swap.
+8. ✅ **Phase 6 — Detail:** Voronoi **boundary noise-warp** (`region_warp`, salt
+   `0x11`, on by default when regions is used); **biome-border dithering**
+   (`dither` pass, salt `0x13`); **Poisson-disc resource nodes** (`resources`
+   pass, salt `0x12`); verified full pipeline + final PNG + install swap.
+   **Remaining art/statics follow-ups** (need real UO statics, not land tiles):
+   render building walls as statics (Phase 5 follow-up), and pixel-authentic
+   cliff-face mountains.
 
 ### Library → pass → seed map
 

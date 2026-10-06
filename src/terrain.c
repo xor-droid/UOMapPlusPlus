@@ -15,6 +15,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <math.h>
 
 /* Deterministic per-cell hash (for tile variation). */
@@ -560,7 +561,8 @@ static void regions_pass(terrain_grid *g, const mapgen_config *cfg) {
 
     voronoi_diagram vd;
     if (voronoi_build(&vd, g->region, W, H, cfg->seed,
-                      cfg->region_spacing, cfg->region_jitter) != 0) {
+                      cfg->region_spacing, cfg->region_jitter,
+                      cfg->region_warp, cfg->frequency * 2.5) != 0) {
         free(g->region); g->region = NULL;
         free(g->flags);  g->flags  = NULL;
         fprintf(stderr, "warning: regions skipped (voronoi alloc failed)\n");
@@ -689,7 +691,7 @@ static void wfc_pass(terrain_grid *g, const mapgen_config *cfg) {
     voronoi_diagram vd;
     if (!scratch ||
         voronoi_build(&vd, scratch, W, H, cfg->seed,
-                      cfg->region_spacing, cfg->region_jitter) != 0) {
+                      cfg->region_spacing, cfg->region_jitter, 0.0, 0.0) != 0) {
         free(scratch);
         fprintf(stderr, "warning: wfc skipped (voronoi alloc failed)\n");
         return;
@@ -1033,6 +1035,92 @@ static void towns_pass(terrain_grid *g, const mapgen_config *cfg) {
     free(allow); free(cost); free(path); free(tx); free(ty);
 }
 
+/* --- Phase 6: biome-border dithering + Poisson resource nodes ------------- */
+
+/*
+ * Dither climate-biome borders: a border cell adopts a differing neighbour's
+ * biome with a hashed probability, stippling the hard Voronoi/latitude edges
+ * into a soft transition band. Reads a snapshot so the pass is simultaneous
+ * (no cascade); deterministic via cell_hash.
+ */
+static void dither_pass(terrain_grid *g, const mapgen_config *cfg) {
+    const int W = g->width, H = g->height;
+    const size_t n = (size_t)W * (size_t)H;
+    uint8_t *src = (uint8_t *)malloc(n);
+    if (!src) { fprintf(stderr, "warning: dither skipped (out of memory)\n"); return; }
+    memcpy(src, g->cat, n);
+
+    const uint64_t thresh = (uint64_t)(cfg->dither_strength * (double)UINT64_MAX);
+    long swapped = 0;
+    for (int y = 0; y < H; ++y)
+        for (int x = 0; x < W; ++x) {
+            size_t i = (size_t)x + (size_t)y * W;
+            int c = src[i];
+            if (!is_climate_cat(c)) continue;
+            int cand[4], nc = 0;
+            if (x > 0     && is_climate_cat(src[i-1]) && src[i-1] != c) cand[nc++] = src[i-1];
+            if (x < W-1   && is_climate_cat(src[i+1]) && src[i+1] != c) cand[nc++] = src[i+1];
+            if (y > 0     && is_climate_cat(src[i-W]) && src[i-W] != c) cand[nc++] = src[i-W];
+            if (y < H-1   && is_climate_cat(src[i+W]) && src[i+W] != c) cand[nc++] = src[i+W];
+            if (nc == 0) continue;
+            uint64_t h = cell_hash(cfg->seed, x, y, NOISE_LAYER_DITHER);
+            if (h >= thresh) continue;
+            int pick = cand[(h >> 32) % (uint64_t)nc];
+            g->cat[i] = (uint8_t)pick;
+            g->id[i]  = biome_tile(pick, cell_hash(cfg->seed, x, y, NOISE_LAYER_BIOME));
+            ++swapped;
+        }
+    free(src);
+    fprintf(stderr, "dither: %ld border cells stippled\n", swapped);
+}
+
+/*
+ * Poisson-disc resource nodes: scatter mineral deposits on hills and
+ * mountain-foot land, each a small cluster of ore cells. Deterministic
+ * (Poisson keyed by NOISE_LAYER_RESOURCE).
+ */
+static void resources_pass(terrain_grid *g, const mapgen_config *cfg) {
+    const int W = g->width, H = g->height;
+    const size_t n = (size_t)W * (size_t)H;
+    uint8_t *allow = (uint8_t *)malloc(n);
+    int *rx = (int *)malloc(4096 * sizeof(int));
+    int *ry = (int *)malloc(4096 * sizeof(int));
+    if (!allow || !rx || !ry) {
+        free(allow); free(rx); free(ry);
+        fprintf(stderr, "warning: resources skipped (out of memory)\n");
+        return;
+    }
+    for (int y = 0; y < H; ++y)
+        for (int x = 0; x < W; ++x) {
+            size_t i = (size_t)x + (size_t)y * W;
+            int c = g->cat[i];
+            int eligible = (c == TCAT_HILL || adjacent_to_mountain(g, x, y)) &&
+                           c != TCAT_MOUNTAIN && !IS_WATER_CAT(c) &&
+                           c != TCAT_ROAD && c != TCAT_FLOOR && c != TCAT_WALL;
+            allow[i] = (uint8_t)(eligible ? 1 : 0);
+        }
+    int spacing = cfg->resource_spacing > 8 ? cfg->resource_spacing : 8;
+    int nr = poisson_sample(W, H, (double)spacing, allow, 30,
+                            cfg->seed, NOISE_LAYER_RESOURCE, rx, ry, 4096);
+    long cells = 0;
+    for (int r = 0; r < nr; ++r) {
+        for (int dy = -1; dy <= 1; ++dy)
+            for (int dx = -1; dx <= 1; ++dx) {
+                int nx = rx[r] + dx, ny = ry[r] + dy;
+                if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+                size_t i = (size_t)nx + (size_t)ny * W;
+                if (!allow[i]) continue;
+                uint64_t h = cell_hash(cfg->seed, nx, ny, NOISE_LAYER_RESOURCE);
+                if ((dx || dy) && (h & 1)) continue;   /* ragged cluster edge */
+                g->cat[i] = (uint8_t)TCAT_ORE;
+                g->id[i]  = TILE_MOUNTAIN;              /* rock/ore tile */
+                ++cells;
+            }
+    }
+    fprintf(stderr, "resources: %d nodes, %ld ore cells\n", nr, cells);
+    free(allow); free(rx); free(ry);
+}
+
 int terrain_generate(terrain_grid *g, const mapgen_config *cfg,
                      const tiledata_land *td, struct preview_ctx *pv) {
     const int W = cfg->width, H = cfg->height;
@@ -1270,6 +1358,12 @@ int terrain_generate(terrain_grid *g, const mapgen_config *cfg,
         preview_pass(pv, g, "phase4_cellular_forest-clumps");
     }
 
+    /* Biome-border dithering (soft transitions). */
+    if (cfg->dither) {
+        dither_pass(g, cfg);
+        preview_pass(pv, g, "phase6_dither_soft-biome-borders");
+    }
+
     if (cfg->rivers) {
         carve_rivers(g, cfg, hf);
         preview_pass(pv, g, "base_rivers_meander-fords-lakes");
@@ -1297,6 +1391,12 @@ int terrain_generate(terrain_grid *g, const mapgen_config *cfg,
     if (cfg->towns) {
         towns_pass(g, cfg);
         preview_pass(pv, g, "phase5_towns_roads-bridges-buildings");
+    }
+
+    /* Poisson-disc resource nodes (ore on hills / mountain feet). */
+    if (cfg->resources) {
+        resources_pass(g, cfg);
+        preview_pass(pv, g, "phase6_resources_poisson-ore-nodes");
     }
 
     noise_layer_free(elev); noise_layer_free(moist);
