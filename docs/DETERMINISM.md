@@ -23,10 +23,14 @@ a given seed/config**. A map is fully described by its seed and configuration.
    `NOISE_LAYER_DITHER` (`0x13`, biome-border dithering), `NOISE_LAYER_CLIFF`
    (`0x14`, mountain rock-tile variation + cliff faces) and
    `NOISE_LAYER_CONTPLACE` (`0x15`, continent-center placement = positions by
-   seed). The erosion/regions/
-   wfc/cellular/towns/dither/resources/cliffs passes are all off by default; with
-   them off, output is byte-identical to the pre-fork builds. A* and MST use no
-   RNG (fixed tie-breaks). Town building walls and cliff rocks are emitted as
+   seed), `NOISE_LAYER_CLEARING` (`0x16`, Poisson building-clearing placement)
+   and `NOISE_LAYER_PASS` (`0x17`, connect-pass meander + width variation). The
+   erosion/regions/wfc/cellular/towns/dither/resources/cliffs/connect/clearings
+   passes are all off by default; with them off, output is byte-identical to the
+   pre-fork builds. A* and MST use no RNG (fixed tie-breaks); the **connect**
+   links (multi-source Dijkstra + MST) and the **foothills** perimeter-grading
+   pass (`--mountain-slope`, BFS from the land ringing each range) are likewise
+   RNG-free and need no salt. Town building walls and cliff rocks are emitted as
    real statics, merged into `staticsN.mul` in canonical per-block order.
 3. **No nondeterministic inputs.** No `rand()`, no `time()`, no threads, and
    **no environment variables**. Configuration is CLI flags + optional file only.

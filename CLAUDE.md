@@ -142,6 +142,14 @@ out/                      generated output (NOT committed)
                biomes, then passes for mountains, **rivers** (meander, fords,
                lakes), **beaches** (sloped coasts), **mountain passes**, and
                slope-limit. Continent shaping = elevation noise − radial falloff.
+               Also the **connect** pass (`--connect`: multi-source Dijkstra + MST
+               link disconnected within-continent land, carving meandering grass
+               passes `--pass-width`/`--pass-slope` through mountains or sand
+               causeways over inland water; salt `0x17`), the **foothills** pass
+               (`--mountain-slope`: BFS-grade every mountain perimeter into sloped
+               foothills, no RNG), and the **clearings** pass (`--clearings`:
+               reserve flat vegetation-free building plots; salt `0x16`). All off
+               by default (byte-identical when off).
                Owns `terrain_grid`, the shared pass state: final `id/z/cat` plus
                reusable float layers (`hfield` populated now; `moisture`,
                `temperature`, `region`, `flags` reserved/NULL until a later pass

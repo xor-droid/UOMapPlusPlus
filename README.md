@@ -66,6 +66,17 @@ directory so you can inspect each stage, plus a `final` image.
 - **Rivers** — downhill, meandering, routed around mountains, with **fords** and
   **lakes**. **Mountains** — ridged ranges with walkable **passes**; `--cliffs`
   gives them varied authentic rock tiles and cliff-face rock statics.
+  `--mountain-slope N` grades **every** mountain perimeter into sloped foothills
+  (a BFS carries the surrounding land height up to N tiles inward) instead of
+  leaving vertical walls.
+- **Connectivity** (`--connect`) — guarantees no land is cut off by water or
+  mountain: a multi-source Dijkstra + MST finds the cheapest links between
+  disconnected regions and carves a meandering grass **pass** through mountains or
+  a sand **causeway** over inland water. `--pass-width` sets the valley half-width
+  (default 10 ≈ 20 tiles wide); `--pass-slope` grades the rock down to the carved
+  valley floor (default 8); `--connect-max` caps the crossing cost so the open
+  ocean between continents is preserved.
+- **Clearings** (`--clearings`) — reserve flat, vegetation-free building plots.
 - **Towns** (`--towns`) — Poisson-disc town sites, an **MST + A\*** road network
   that **bridges rivers**, **BSP** building layouts with **real UO stone-wall /
   door statics**, and **L-system** side-trails.
