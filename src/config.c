@@ -33,7 +33,7 @@ void config_defaults(mapgen_config *cfg) {
     cfg->mountain_level     = 0.70;
     cfg->mountain_z         = 70;
     cfg->mountain_scale     = 0.0;   /* 0 => auto (frequency * 0.5) */
-    cfg->rivers             = 0;
+    cfg->rivers             = 1;     /* on by default (disable with --no-rivers) */
     cfg->river_density      = 0;
     cfg->biomes             = 1;
     cfg->temperature_bias   = 0.0;
@@ -45,18 +45,18 @@ void config_defaults(mapgen_config *cfg) {
     cfg->beach_width        = 4;
     cfg->lakes              = 1;
     cfg->passes             = 1;
-    cfg->erosion            = 0;      /* off by default: existing maps unchanged */
+    cfg->erosion            = 1;     /* on by default (disable with --no-erosion) */
     cfg->erosion_density    = 0.20;
     cfg->erosion_lifetime   = 30;
     cfg->erosion_radius     = 3;
     cfg->erosion_erode      = 0.30;
     cfg->erosion_deposition = 0.30;
     cfg->erosion_z_scale    = 1.0;   /* eroded relief (z units) folded back 1:1 */
-    cfg->regions            = 0;     /* off by default: existing maps unchanged */
+    cfg->regions            = 1;     /* on by default (disable with --no-regions) */
     cfg->region_spacing     = 64;
     cfg->region_jitter      = 0.6;
-    cfg->wfc                = 0;
-    cfg->cellular           = 0;
+    cfg->wfc                = 1;     /* on by default (disable with --no-wfc); implies regions */
+    cfg->cellular           = 1;     /* on by default (disable with --no-cellular) */
     cfg->cellular_fill      = 0.42;
     cfg->cellular_iterations = 4;
     cfg->towns              = 0;
@@ -64,7 +64,7 @@ void config_defaults(mapgen_config *cfg) {
     cfg->town_size          = 48;
     cfg->trails             = 1;     /* active only when towns is on */
     cfg->region_warp        = 12.0;  /* organic Voronoi borders by default (0 = crisp) */
-    cfg->dither             = 0;
+    cfg->dither             = 1;     /* on by default (disable with --no-dither) */
     cfg->dither_strength    = 0.35;
     cfg->resources          = 0;
     cfg->resource_spacing   = 120;

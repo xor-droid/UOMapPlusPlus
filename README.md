@@ -24,18 +24,21 @@ input is the client's `tiledata.mul` (read-only).
 
 Each row is a pass run in this fixed order by the pipeline harness. The base
 terrain + enrichment passes are inherited from `uomapgen`; the **library passes**
-are the fork's additions and are **off by default** (enable per the flag), so an
-unconfigured run is byte-identical to the original generator.
+are the fork's additions. Rivers, hydraulic erosion, Voronoi regions, WFC biome
+transitions, cellular forest clumps and biome-border dithering are now **on by
+default** (disable each with its `--no-*` flag); output is still byte-identical
+for a given seed **and** config, and `--no-rivers --no-erosion --no-regions
+--no-wfc --no-cellular --no-dither` reproduces the original generator's bytes.
 
 | # | Pass | Algorithm / library | Flag | On by default |
 |--:|------|---------------------|------|:--:|
 | 0 | Base terrain (elevation, land/sea, biomes, mountains) | FastNoiseLite (OpenSimplex2) | — | ✅ |
-| 1 | **Hydraulic erosion** (valleys, drainage) | droplet erosion + distance transform / blur (SciPy-style, in C) | `--erosion` | ⬜ |
-| 2 | **Regions** (organic climate biomes) | **Voronoi** territories (+ boundary noise-warp) + **MST** + marching squares | `--regions` | ⬜ |
-| 3 | **Biome transitions** | **Wave Function Collapse** | `--wfc` | ⬜ |
-| 4 | **Forest clumps** | **cellular automata** | `--cellular` | ⬜ |
-| 5 | **Biome-border dithering** | hashed stipple | `--dither` | ⬜ |
-| 6 | Rivers (meander, fords, lakes) | downhill trace | `--rivers` | ⬜ |
+| 1 | **Hydraulic erosion** (valleys, drainage) | droplet erosion + distance transform / blur (SciPy-style, in C) | `--erosion` / `--no-erosion` | ✅ |
+| 2 | **Regions** (organic climate biomes) | **Voronoi** territories (+ boundary noise-warp) + **MST** + marching squares | `--regions` / `--no-regions` | ✅ |
+| 3 | **Biome transitions** | **Wave Function Collapse** | `--wfc` / `--no-wfc` | ✅ |
+| 4 | **Forest clumps** | **cellular automata** | `--cellular` / `--no-cellular` | ✅ |
+| 5 | **Biome-border dithering** | hashed stipple | `--dither` / `--no-dither` | ✅ |
+| 6 | Rivers (meander, fords, lakes) | downhill trace | `--rivers` / `--no-rivers` | ✅ |
 | 7 | Beaches (sloped coasts) | BFS distance | — | ✅ |
 | 8 | Mountain passes | corridor carve | — | ✅ |
 | 9 | Slope limit (navigability) | relaxation | — | ✅ |

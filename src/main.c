@@ -34,6 +34,7 @@ enum {
     OPT_FLAT,
     OPT_FLAT_Z,
     OPT_RIVERS,
+    OPT_NO_RIVERS,
     OPT_RIVER_DENSITY,
     OPT_NO_BIOMES,
     OPT_TEMP_BIAS,
@@ -46,15 +47,19 @@ enum {
     OPT_NO_LAKES,
     OPT_NO_PASSES,
     OPT_EROSION,
+    OPT_NO_EROSION,
     OPT_EROSION_DENSITY,
     OPT_EROSION_LIFETIME,
     OPT_EROSION_RADIUS,
     OPT_EROSION_ZSCALE,
     OPT_REGIONS,
+    OPT_NO_REGIONS,
     OPT_REGION_SPACING,
     OPT_REGION_JITTER,
     OPT_WFC,
+    OPT_NO_WFC,
     OPT_CELLULAR,
+    OPT_NO_CELLULAR,
     OPT_CELLULAR_FILL,
     OPT_CELLULAR_ITERS,
     OPT_TOWNS,
@@ -63,6 +68,7 @@ enum {
     OPT_NO_TRAILS,
     OPT_REGION_WARP,
     OPT_DITHER,
+    OPT_NO_DITHER,
     OPT_DITHER_STRENGTH,
     OPT_RESOURCES,
     OPT_RESOURCE_SPACING,
@@ -130,24 +136,30 @@ static void print_help(const char *argv0) {
 "  --mountain-z <int>        Extra z at peaks, 0..127 (default 70).\n"
 "  --mountain-scale <f>      Ridge frequency; smaller = bigger/broader ranges\n"
 "                            (default: auto = frequency*0.5).\n"
-"  --rivers              Carve downhill rivers from high ground to the sea.\n"
+"  --rivers              Carve downhill rivers from high ground to the sea\n"
+"                        (ON by default; --no-rivers to disable).\n"
+"  --no-rivers           Skip rivers.\n"
 "  --river-density <n>       How many rivers: number of sources, higher = more\n"
 "                            (default: auto ~ (w+h)/400; e.g. 10 sparse, 120 dense).\n"
-"  Hydraulic erosion (off by default; carves valleys/drainage before rivers):\n"
+"  Hydraulic erosion (ON by default; carves valleys/drainage before rivers):\n"
 "  --erosion                 Enable droplet erosion on the height field.\n"
+"  --no-erosion              Disable hydraulic erosion.\n"
 "  --erosion-density <f>     Droplets = f * width * height (default 0.20).\n"
 "  --erosion-lifetime <n>    Max steps per droplet (default 30).\n"
 "  --erosion-radius <n>      Erosion brush radius in tiles (default 3).\n"
 "  --erosion-z-scale <f>     How strongly eroded relief folds back into z\n"
 "                            (1.0 = full carve; default 1.0).\n"
 "                            (erosion-erode / erosion-deposition: config file only.)\n"
-"  Regions (off by default; Voronoi climate territories -> organic biomes):\n"
+"  Regions (ON by default; Voronoi climate territories -> organic biomes):\n"
 "  --regions                 Partition the map into Voronoi biome territories.\n"
+"  --no-regions              Disable Voronoi regions (also disables WFC).\n"
 "  --region-spacing <n>      Territory size: site spacing in tiles (default 64).\n"
 "  --region-jitter <f>       Site jitter within its cell, [0,1] (default 0.6).\n"
 "  --wfc                     WFC biome transitions over territories (legal\n"
-"                            biome adjacency; implies --regions).\n"
-"  --cellular                Cellular-automata organic forest clumps.\n"
+"                            biome adjacency; implies --regions). ON by default.\n"
+"  --no-wfc                  Disable WFC biome transitions.\n"
+"  --cellular                Cellular-automata organic forest clumps (ON by default).\n"
+"  --no-cellular             Disable cellular forest clumps.\n"
 "  --cellular-fill <f>       Forest random-fill probability, [0,1] (default 0.42).\n"
 "  --cellular-iterations <n> CA smoothing iterations (default 4).\n"
 "  Towns (off by default; Poisson sites, MST roads, A* paths, BSP buildings):\n"
@@ -158,7 +170,8 @@ static void print_help(const char *argv0) {
 "  Detail/polish:\n"
 "  --region-warp <f>         Voronoi border domain-warp amplitude in tiles\n"
 "                            (organic borders; default 12, 0 = crisp polygons).\n"
-"  --dither                  Stipple biome borders into soft transitions.\n"
+"  --dither                  Stipple biome borders into soft transitions (ON by default).\n"
+"  --no-dither               Disable biome-border dithering.\n"
 "  --dither-strength <f>     Fraction of border cells to swap, [0,1] (default 0.35).\n"
 "  --resources               Poisson-disc resource (ore) nodes on hills/foothills.\n"
 "  --resource-spacing <n>    Min distance between resource nodes (default 120).\n"
@@ -290,6 +303,7 @@ int main(int argc, char **argv) {
         { "flat",        no_argument,       0, OPT_FLAT },
         { "flat-z",      required_argument, 0, OPT_FLAT_Z },
         { "rivers",      no_argument,       0, OPT_RIVERS },
+        { "no-rivers",   no_argument,       0, OPT_NO_RIVERS },
         { "river-density",      required_argument, 0, OPT_RIVER_DENSITY },
         { "no-biomes",   no_argument,       0, OPT_NO_BIOMES },
         { "temperature-bias",   required_argument, 0, OPT_TEMP_BIAS },
@@ -302,15 +316,19 @@ int main(int argc, char **argv) {
         { "no-lakes",    no_argument,       0, OPT_NO_LAKES },
         { "no-passes",   no_argument,       0, OPT_NO_PASSES },
         { "erosion",           no_argument,       0, OPT_EROSION },
+        { "no-erosion",        no_argument,       0, OPT_NO_EROSION },
         { "erosion-density",   required_argument, 0, OPT_EROSION_DENSITY },
         { "erosion-lifetime",  required_argument, 0, OPT_EROSION_LIFETIME },
         { "erosion-radius",    required_argument, 0, OPT_EROSION_RADIUS },
         { "erosion-z-scale",   required_argument, 0, OPT_EROSION_ZSCALE },
         { "regions",           no_argument,       0, OPT_REGIONS },
+        { "no-regions",        no_argument,       0, OPT_NO_REGIONS },
         { "region-spacing",    required_argument, 0, OPT_REGION_SPACING },
         { "region-jitter",     required_argument, 0, OPT_REGION_JITTER },
         { "wfc",               no_argument,       0, OPT_WFC },
+        { "no-wfc",            no_argument,       0, OPT_NO_WFC },
         { "cellular",          no_argument,       0, OPT_CELLULAR },
+        { "no-cellular",       no_argument,       0, OPT_NO_CELLULAR },
         { "cellular-fill",     required_argument, 0, OPT_CELLULAR_FILL },
         { "cellular-iterations", required_argument, 0, OPT_CELLULAR_ITERS },
         { "towns",             no_argument,       0, OPT_TOWNS },
@@ -319,6 +337,7 @@ int main(int argc, char **argv) {
         { "no-trails",         no_argument,       0, OPT_NO_TRAILS },
         { "region-warp",       required_argument, 0, OPT_REGION_WARP },
         { "dither",            no_argument,       0, OPT_DITHER },
+        { "no-dither",         no_argument,       0, OPT_NO_DITHER },
         { "dither-strength",   required_argument, 0, OPT_DITHER_STRENGTH },
         { "resources",         no_argument,       0, OPT_RESOURCES },
         { "resource-spacing",  required_argument, 0, OPT_RESOURCE_SPACING },
@@ -379,6 +398,7 @@ int main(int argc, char **argv) {
             case OPT_FLAT:          cfg.flat = 1; break;
             case OPT_FLAT_Z:        cfg.flat = 1; cfg.flat_z = (int)strtol(optarg, NULL, 0); break;
             case OPT_RIVERS:        cfg.rivers = 1; break;
+            case OPT_NO_RIVERS:     cfg.rivers = 0; break;
             case OPT_RIVER_DENSITY: cfg.rivers = 1; cfg.river_density = (int)strtol(optarg, NULL, 0); break;
             case OPT_NO_BIOMES:     cfg.biomes = 0; break;
             case OPT_TEMP_BIAS:     cfg.temperature_bias = strtod(optarg, NULL); break;
@@ -391,15 +411,19 @@ int main(int argc, char **argv) {
             case OPT_NO_LAKES:      cfg.lakes = 0; break;
             case OPT_NO_PASSES:     cfg.passes = 0; break;
             case OPT_EROSION:          cfg.erosion = 1; break;
+            case OPT_NO_EROSION:       cfg.erosion = 0; break;
             case OPT_EROSION_DENSITY:  cfg.erosion = 1; cfg.erosion_density = strtod(optarg, NULL); break;
             case OPT_EROSION_LIFETIME: cfg.erosion = 1; cfg.erosion_lifetime = (int)strtol(optarg, NULL, 0); break;
             case OPT_EROSION_RADIUS:   cfg.erosion = 1; cfg.erosion_radius = (int)strtol(optarg, NULL, 0); break;
             case OPT_EROSION_ZSCALE:   cfg.erosion = 1; cfg.erosion_z_scale = strtod(optarg, NULL); break;
             case OPT_REGIONS:        cfg.regions = 1; break;
+            case OPT_NO_REGIONS:     cfg.regions = 0; cfg.wfc = 0; break;
             case OPT_REGION_SPACING: cfg.regions = 1; cfg.region_spacing = (int)strtol(optarg, NULL, 0); break;
             case OPT_REGION_JITTER:  cfg.regions = 1; cfg.region_jitter = strtod(optarg, NULL); break;
             case OPT_WFC:            cfg.wfc = 1; cfg.regions = 1; break;
+            case OPT_NO_WFC:         cfg.wfc = 0; break;
             case OPT_CELLULAR:       cfg.cellular = 1; break;
+            case OPT_NO_CELLULAR:    cfg.cellular = 0; break;
             case OPT_CELLULAR_FILL:  cfg.cellular = 1; cfg.cellular_fill = strtod(optarg, NULL); break;
             case OPT_CELLULAR_ITERS: cfg.cellular = 1; cfg.cellular_iterations = (int)strtol(optarg, NULL, 0); break;
             case OPT_TOWNS:        cfg.towns = 1; break;
@@ -408,6 +432,7 @@ int main(int argc, char **argv) {
             case OPT_NO_TRAILS:    cfg.trails = 0; break;
             case OPT_REGION_WARP:  cfg.region_warp = strtod(optarg, NULL); break;
             case OPT_DITHER:       cfg.dither = 1; break;
+            case OPT_NO_DITHER:    cfg.dither = 0; break;
             case OPT_DITHER_STRENGTH: cfg.dither = 1; cfg.dither_strength = strtod(optarg, NULL); break;
             case OPT_RESOURCES:    cfg.resources = 1; break;
             case OPT_RESOURCE_SPACING: cfg.resources = 1; cfg.resource_spacing = (int)strtol(optarg, NULL, 0); break;
