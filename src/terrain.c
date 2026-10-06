@@ -1407,6 +1407,11 @@ static void connect_pass(terrain_grid *g, const mapgen_config *cfg) {
             for (int k = 0; k < 4; ++k) {
                 int v = nb[k]; if (v < 0) continue;
                 if (bt[v] == 0) continue;
+                /* --no-causeways: never bridge the open sea (ocean), so land
+                 * separated by water stays islands. Inland water (rivers/lakes
+                 * on a landmass, bt==2) is still bridged, so a river never cuts
+                 * off part of a mainland. */
+                if (!cfg->causeways && bt[v] == 3) continue;
                 int cost = bt[v] == 1 ? CM : (bt[v] == 2 ? CWAT_IN : CWAT_OCEAN);
                 int nd = d + cost;
                 if (nd <= MAXC && nd < dist[v]) { dist[v]=nd; comp[v]=comp[b]; prev[v]=b; nxt[v]=head[nd]; head[nd]=v; }

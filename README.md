@@ -78,7 +78,9 @@ directory so you can inspect each stage, plus a `final` image.
   a sand **causeway** over inland water. `--pass-width` sets the valley half-width
   (default 10 ≈ 20 tiles wide); `--pass-slope` grades the rock down to the carved
   valley floor (default 8); `--connect-max` caps the crossing cost so the open
-  ocean between continents is preserved.
+  ocean between continents is preserved. `--no-causeways` goes further: it never
+  bridges the open sea at all (so islands stay separate), while still carving
+  mountain passes and bridging rivers/inland water on a mainland.
 - **Clearings** (`--clearings`) — reserve flat, vegetation-free building plots.
 - **Towns** (`--towns`) — Poisson-disc town sites, an **MST + A\*** road network
   that **bridges rivers**, **BSP** building layouts with **real UO stone-wall /

@@ -73,6 +73,7 @@ void config_defaults(mapgen_config *cfg) {
     cfg->terrace_step       = 5;
     cfg->plain_z            = 3;
     cfg->connect            = 0;
+    cfg->causeways          = 1;     /* connect may bridge the sea; --no-causeways = keep islands, still bridge rivers */
     cfg->connect_max        = 6000;  /* cost budget: mountains/inland water bridge generously, open ocean does not */
     cfg->pass_width         = 10;    /* ~20-tile-wide grassy valleys, not 1-tile scars */
     cfg->pass_slope         = 8;     /* foothill band grading mountain rock down to the valley */
@@ -246,6 +247,8 @@ int config_set_kv(mapgen_config *cfg, const char *key_in, const char *val) {
         cfg->plain_z = (int)strtol(val, NULL, 0);
     } else if (!strcmp(key, "connect")) {
         if (parse_bool(val, &cfg->connect) != 0) return -1;
+    } else if (!strcmp(key, "causeways")) {
+        if (parse_bool(val, &cfg->causeways) != 0) return -1;
     } else if (!strcmp(key, "connect_max")) {
         cfg->connect_max = (int)strtol(val, NULL, 0);
     } else if (!strcmp(key, "pass_width")) {
@@ -484,6 +487,7 @@ int config_dump(const mapgen_config *cfg, const char *path) {
     fprintf(f, "cliffs = %s\n",       cfg->cliffs ? "true" : "false");
     fprintf(f, "terrace = %s\n",      cfg->terrace ? "true" : "false");
     fprintf(f, "connect = %s\n",      cfg->connect ? "true" : "false");
+    fprintf(f, "causeways = %s\n",    cfg->causeways ? "true" : "false");
     fprintf(f, "clearings = %s\n",    cfg->clearings ? "true" : "false");
     fprintf(f, "emit_mapdef = %s\n",  cfg->emit_mapdef ? "true" : "false");
     fprintf(f, "terrain_only = %s\n", cfg->terrain_only ? "true" : "false");

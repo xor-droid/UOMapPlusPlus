@@ -81,6 +81,7 @@ typedef struct {
     int      terrace_step;       /* z quantization step for terraces */
     int      plain_z;            /* land at or below |plain_z| snaps flat to 0 */
     int      connect;       /* bool: connect cut-off land via passes/bridges */
+    int      causeways;          /* bool: allow connect to bridge water (0 = mountain passes only) */
     int      connect_max;        /* max barrier-crossing cost (caps bridge length) */
     int      pass_width;         /* carved pass/causeway half-width (natural valleys) */
     int      pass_slope;         /* foothill band width grading rock down to the valley (0=cliff) */
