@@ -166,7 +166,7 @@ static void print_help(const char *argv0) {
 "  --connect                 Carve passes/bridges so no land is cut off by\n"
 "                            mountains or water.\n"
 "  --connect-max <n>         Max barrier-crossing cost; higher bridges wider gaps\n"
-"                            (default 2000; keeps oceans between continents).\n"
+"                            (default 6000; keeps the open ocean between continents).\n"
 "  --clearings               Reserve flat, vegetation-free building plots.\n"
 "  --clearing-spacing <n>    Min distance between clearings (default 140).\n"
 "  --clearing-size <n>       Clearing radius in tiles (default 10).\n"

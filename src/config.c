@@ -73,7 +73,7 @@ void config_defaults(mapgen_config *cfg) {
     cfg->terrace_step       = 5;
     cfg->plain_z            = 3;
     cfg->connect            = 0;
-    cfg->connect_max        = 2000;  /* block-cost budget: long mountain passes, short water bridges */
+    cfg->connect_max        = 6000;  /* cost budget: mountains/inland water bridge generously, open ocean does not */
     cfg->clearings          = 0;
     cfg->clearing_spacing   = 140;
     cfg->clearing_size      = 10;
