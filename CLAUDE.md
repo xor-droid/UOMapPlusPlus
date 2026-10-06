@@ -169,6 +169,12 @@ out/                      generated output (NOT committed)
 - `mapdef`   — emits `map-definitions.snippet.json` for ModernUO.
 - `install`  — final step: copies the `.mul` triplet from `out_dir` into
                `install_dir` (the dir UOFiddler/ModernUO loads). No-op if unset.
+- `housing`  — post-generation **buildability summary** printed to stdout (never
+               affects `.mul` bytes): counts water / impassable rock / static-
+               blocked / buildable land, and how many houses of each UO footprint
+               (small 7×7 … castle 31×31) fit on flat, clear, non-overlapping
+               ground. Uses `vegetation_blocks()` so only true obstacles
+               (trees/rocks) count, not passable ground cover.
 
 ## UO `.mul` byte format (what the writers must honor)
 

@@ -7,6 +7,7 @@
 #include "uomappp/preview.h"
 #include "uomappp/mapdef.h"
 #include "uomappp/install.h"
+#include "uomappp/housing.h"
 
 #include <stdio.h>
 
@@ -60,6 +61,10 @@ int pipeline_run(const mapgen_config *cfg) {
      * install_dir is empty). */
     if (rc == 0)
         if (install_resources(cfg) != 0) rc = 1;
+
+    /* Buildability / housing summary (diagnostic; stdout only). */
+    if (rc == 0)
+        housing_summary_print(&grid, cfg);
 
     terrain_free(&grid);
 

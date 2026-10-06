@@ -17,10 +17,16 @@ static const uint16_t REEDS[]           = { 0x0D05 };
 
 #define PICK(arr, h) ((arr)[(h) % (sizeof(arr) / sizeof((arr)[0]))])
 
-int vegetation_place(const mapgen_config *cfg, int cat, int cx, int cy,
-                     int z, int gx, int gy, static_rec *out) {
+/* Shared source of truth for both placement and the housing-buildability query:
+ * pick the per-cell blocking feature (tree/rock/cactus/boulder -> *out_id) and
+ * passable ground cover (flower/fern/grass/reed -> *out_cover). The RNG draws
+ * happen in a fixed order so output stays byte-identical. */
+static void veg_pick(const mapgen_config *cfg, int cat, int gx, int gy,
+                     uint16_t *out_id, uint16_t *out_cover) {
+    *out_id = 0;
+    *out_cover = 0;
     if (!cfg->vegetation)
-        return 0;
+        return;
 
     /* Deterministic per-cell RNG stream. */
     uint64_t s = cfg->seed
@@ -36,9 +42,8 @@ int vegetation_place(const mapgen_config *cfg, int cat, int cx, int cy,
     const double rd = cfg->rock_density;
     const double pd = cfg->plant_density;
 
-    int n = 0;
-    uint16_t id = 0;        /* primary feature */
-    uint16_t cover = 0;     /* optional ground cover */
+    uint16_t id = 0;        /* primary feature (blocking) */
+    uint16_t cover = 0;     /* optional ground cover (passable) */
 
     switch (cat) {
         case TCAT_FOREST:
@@ -70,9 +75,18 @@ int vegetation_place(const mapgen_config *cfg, int cat, int cx, int cy,
             if (u1 < rd * 2.0)  id = PICK(BOULDERS, r1);
             break;
         default:
-            return 0;  /* water, river, lake, beach -> no vegetation */
+            return;  /* water, river, lake, beach -> no vegetation */
     }
+    *out_id = id;
+    *out_cover = cover;
+}
 
+int vegetation_place(const mapgen_config *cfg, int cat, int cx, int cy,
+                     int z, int gx, int gy, static_rec *out) {
+    uint16_t id, cover;
+    veg_pick(cfg, cat, gx, gy, &id, &cover);
+
+    int n = 0;
     if (cover) {
         out[n].id = cover; out[n].x = (uint8_t)cx; out[n].y = (uint8_t)cy;
         out[n].z = (int8_t)z; out[n].hue = 0; ++n;
@@ -82,4 +96,11 @@ int vegetation_place(const mapgen_config *cfg, int cat, int cx, int cy,
         out[n].z = (int8_t)z; out[n].hue = 0; ++n;
     }
     return n;
+}
+
+int vegetation_blocks(const mapgen_config *cfg, int cat, int gx, int gy) {
+    uint16_t id, cover;
+    veg_pick(cfg, cat, gx, gy, &id, &cover);
+    (void)cover;                 /* ground cover is passable; only features block */
+    return id != 0;
 }

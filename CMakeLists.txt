@@ -29,6 +29,7 @@ add_executable(uomappp
   src/biome.c
   src/terrain.c
   src/vegetation.c
+  src/housing.c
   src/mapwriter.c
   src/statics.c
   src/preview.c

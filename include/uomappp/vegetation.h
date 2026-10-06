@@ -31,4 +31,10 @@ typedef struct {
 int vegetation_place(const mapgen_config *cfg, int cat, int cx, int cy,
                      int z, int gx, int gy, static_rec *out);
 
+/* 1 if cell (gx,gy) of category `cat` gets a movement-blocking vegetation
+ * feature (tree/rock/cactus/boulder); 0 otherwise. Passable ground cover
+ * (flowers/ferns/grass/reeds) does not block. Matches vegetation_place exactly
+ * and is used by the housing-buildability summary. */
+int vegetation_blocks(const mapgen_config *cfg, int cat, int gx, int gy);
+
 #endif /* UOMAPGEN_VEGETATION_H */
