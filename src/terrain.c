@@ -1239,159 +1239,156 @@ static void cliffs_pass(terrain_grid *g, const mapgen_config *cfg) {
 
 #define CELL_WALK(c) (!IS_WATER_CAT(c) && (c) != TCAT_MOUNTAIN)
 
-static int block_walk_z(const terrain_grid *g, int bx, int by) {
-    const int W = g->width;
-    for (int cy = 0; cy < 8; ++cy)
-        for (int cx = 0; cx < 8; ++cx) {
-            size_t i = (size_t)(bx * 8 + cx) + (size_t)(by * 8 + cy) * W;
-            if (CELL_WALK(g->cat[i])) return g->z[i];
-        }
-    return 0;
+typedef struct { int cost; int a, b; } conn_link;
+static int conn_link_cmp(const void *A, const void *B) {
+    const conn_link *x = (const conn_link *)A, *y = (const conn_link *)B;
+    if (x->cost != y->cost) return x->cost < y->cost ? -1 : 1;
+    if (x->a != y->a) return x->a < y->a ? -1 : 1;
+    return x->b < y->b ? -1 : (x->b > y->b ? 1 : 0);
 }
+static int conn_find(int *p, int x) { while (p[x] != x) { p[x] = p[p[x]]; x = p[x]; } return x; }
 
 /*
- * Connect cut-off land. Works on the 8x8 block grid: classify each block as
- * walkable / mountain / water, label the connected walkable regions, then run a
- * multi-source Dijkstra (Dial's buckets) outward from the largest region over
- * the barrier blocks (mountain cheap, water expensive). Every other region
- * within the connect_max cost budget gets a corridor carved to the mainland
- * along the cheapest barrier crossing: mountain -> walkable dirt pass, water ->
- * land causeway, with z ramped between the two ends. The budget caps water
- * crossings to narrow gaps so separate continents are NOT bridged across open
- * ocean. Deterministic (no RNG). Gated by `connect`.
+ * Connect cut-off land WITHIN each landmass, at full cell resolution. Classify
+ * every cell as walkable / mountain / inland-water / ocean (ocean = a water
+ * component touching the map border). Label walkable regions, then multi-source
+ * Dijkstra (Dial's buckets) from all regions at once over crossable barriers:
+ * mountains and inland water are cheap (bridge generously), ocean is costly so
+ * only NARROW bays/straits get bridged and the wide open sea between continents
+ * does not. Where two regions' claimed areas meet is a candidate link; an MST
+ * (Kruskal) carves the cheapest links joining every same-landmass piece within
+ * the connect_max budget: mountain -> ~3-wide dirt pass, water -> land causeway.
+ * Deterministic (no RNG). Gated by `connect`.
  */
 static void connect_pass(terrain_grid *g, const mapgen_config *cfg) {
     const int W = g->width, H = g->height;
-    const int BW = W >> 3, BH = H >> 3, NB = BW * BH;
-    if (NB <= 1) return;
+    const size_t N = (size_t)W * (size_t)H;
+    const int CM = 1, CWAT_IN = 5, CWAT_OCEAN = 25;
     const int MAXC = cfg->connect_max > 0 ? cfg->connect_max : 2000;
-    const int CW = 1, CM = 1, CWAT = 400;   /* enter cost: walk, mountain, water */
 
-    uint8_t *bt   = (uint8_t *)malloc((size_t)NB);
-    int     *comp = (int *)malloc((size_t)NB * sizeof(int));
-    int     *q    = (int *)malloc((size_t)NB * sizeof(int));
-    if (!bt || !comp || !q) { free(bt); free(comp); free(q);
-        fprintf(stderr, "warning: connect skipped (out of memory)\n"); return; }
-
-    for (int by = 0; by < BH; ++by)
-        for (int bx = 0; bx < BW; ++bx) {
-            int wc = 0, mc = 0, wa = 0;
-            for (int cy = 0; cy < 8; ++cy)
-                for (int cx = 0; cx < 8; ++cx) {
-                    int c = g->cat[(size_t)(bx*8+cx) + (size_t)(by*8+cy)*W];
-                    if (c == TCAT_MOUNTAIN) ++mc;
-                    else if (IS_WATER_CAT(c)) ++wa;
-                    else ++wc;
-                }
-            bt[by*BW+bx] = (uint8_t)(wc >= 24 ? 0 : (mc >= wa ? 1 : 2));
-            comp[by*BW+bx] = -1;
-        }
-
-    /* Label walkable-block components (4-connectivity). */
-    int ncomp = 0, *csz = NULL, cszcap = 0;
-    for (int b0 = 0; b0 < NB; ++b0) {
-        if (bt[b0] != 0 || comp[b0] != -1) continue;
-        int qh = 0, qt = 0, sz = 0;
-        comp[b0] = ncomp; q[qt++] = b0;
-        while (qh < qt) {
-            int b = q[qh++]; ++sz;
-            int bx = b % BW, by = b / BW;
-            int nb[4] = { bx>0?b-1:-1, bx<BW-1?b+1:-1, by>0?b-BW:-1, by<BH-1?b+BW:-1 };
-            for (int k = 0; k < 4; ++k)
-                if (nb[k] >= 0 && bt[nb[k]] == 0 && comp[nb[k]] == -1) {
-                    comp[nb[k]] = ncomp; q[qt++] = nb[k];
-                }
-        }
-        if (ncomp == cszcap) { int nc = cszcap ? cszcap*2 : 64;
-            int *t = (int *)realloc(csz, (size_t)nc*sizeof(int)); if (t){csz=t;cszcap=nc;} }
-        if (ncomp < cszcap) csz[ncomp] = sz;
-        ++ncomp;
-    }
-    if (ncomp <= 1) { free(bt); free(comp); free(q); free(csz); return; }
-
-    int main_c = 0;
-    for (int c = 1; c < ncomp; ++c) if (csz[c] > csz[main_c]) main_c = c;
-
-    /* Dial's multi-source Dijkstra from the mainland over barrier blocks. */
-    int *dist = (int *)malloc((size_t)NB*sizeof(int));
-    int *prev = (int *)malloc((size_t)NB*sizeof(int));
-    int *nxt  = (int *)malloc((size_t)NB*sizeof(int));
-    int *head = (int *)malloc((size_t)(MAXC+2)*sizeof(int));
-    if (!dist || !prev || !nxt || !head) {
-        free(bt); free(comp); free(q); free(csz);
-        free(dist); free(prev); free(nxt); free(head);
+    uint8_t *bt   = (uint8_t *)malloc(N);                 /* 0 walk,1 mtn,2 inland,3 ocean */
+    int     *comp = (int *)malloc(N * sizeof(int));
+    int     *dist = (int *)malloc(N * sizeof(int));
+    int     *prev = (int *)malloc(N * sizeof(int));
+    int     *nxt  = (int *)malloc(N * sizeof(int));       /* flood queue, then bucket chains */
+    if (!bt || !comp || !dist || !prev || !nxt) {
+        free(bt); free(comp); free(dist); free(prev); free(nxt);
         fprintf(stderr, "warning: connect skipped (out of memory)\n"); return;
     }
-    for (int b = 0; b < NB; ++b) { dist[b] = INT_MAX; prev[b] = -1; }
-    for (int d = 0; d <= MAXC+1; ++d) head[d] = -1;
-    for (int b = 0; b < NB; ++b)
-        if (comp[b] == main_c) { dist[b] = 0; nxt[b] = head[0]; head[0] = b; }
+    for (size_t i = 0; i < N; ++i) {
+        int c = g->cat[i];
+        bt[i] = (uint8_t)(CELL_WALK(c) ? 0 : (c == TCAT_MOUNTAIN ? 1 : 2));
+        comp[i] = -1;
+    }
 
-    for (int d = 0; d <= MAXC; ++d) {
+    /* Ocean = border-touching water components. */
+    for (int y = 0; y < H; ++y)
+        for (int x = 0; x < W; ++x) {
+            size_t s = (size_t)x + (size_t)y * W;
+            if (bt[s] != 2 || comp[s] != -1) continue;
+            long qh = 0, qt = 0; int border = 0; comp[s] = -2; nxt[qt++] = (int)s;
+            while (qh < qt) {
+                int b = nxt[qh++]; int bx = b % W, by = b / W;
+                if (bx == 0 || by == 0 || bx == W-1 || by == H-1) border = 1;
+                int nb[4] = { bx>0?b-1:-1, bx<W-1?b+1:-1, by>0?b-W:-1, by<H-1?b+W:-1 };
+                for (int k = 0; k < 4; ++k)
+                    if (nb[k] >= 0 && bt[nb[k]] == 2 && comp[nb[k]] == -1) { comp[nb[k]] = -2; nxt[qt++] = nb[k]; }
+            }
+            if (border) for (long i = 0; i < qt; ++i) bt[nxt[i]] = 3;
+        }
+    for (size_t i = 0; i < N; ++i) comp[i] = -1;
+
+    /* Label walkable regions. */
+    int ncomp = 0;
+    for (size_t s0 = 0; s0 < N; ++s0) {
+        if (bt[s0] != 0 || comp[s0] != -1) continue;
+        long qh = 0, qt = 0; comp[s0] = ncomp; nxt[qt++] = (int)s0;
+        while (qh < qt) {
+            int b = nxt[qh++]; int bx = b % W, by = b / W;
+            int nb[4] = { bx>0?b-1:-1, bx<W-1?b+1:-1, by>0?b-W:-1, by<H-1?b+W:-1 };
+            for (int k = 0; k < 4; ++k)
+                if (nb[k] >= 0 && bt[nb[k]] == 0 && comp[nb[k]] == -1) { comp[nb[k]] = ncomp; nxt[qt++] = nb[k]; }
+        }
+        ++ncomp;
+    }
+    if (ncomp <= 1) { free(bt); free(comp); free(dist); free(prev); free(nxt); return; }
+
+    /* Multi-source Dijkstra (Dial's) from every region over crossable barriers. */
+    int *head = (int *)malloc((size_t)(MAXC + 2) * sizeof(int));
+    if (!head) { free(bt); free(comp); free(dist); free(prev); free(nxt);
+        fprintf(stderr, "warning: connect skipped (out of memory)\n"); return; }
+    for (int d = 0; d <= MAXC + 1; ++d) head[d] = -1;
+    for (size_t i = 0; i < N; ++i) { dist[i] = (bt[i] == 0) ? 0 : INT_MAX; prev[i] = -1; }
+    for (size_t i = 0; i < N; ++i) if (bt[i] == 0) { nxt[i] = head[0]; head[0] = (int)i; }
+    for (int d = 0; d <= MAXC; ++d)
         for (int b = head[d]; b != -1; b = nxt[b]) {
-            if (dist[b] != d) continue;              /* stale */
-            int bx = b % BW, by = b / BW;
-            int nb[4] = { bx>0?b-1:-1, bx<BW-1?b+1:-1, by>0?b-BW:-1, by<BH-1?b+BW:-1 };
+            if (dist[b] != d) continue;
+            int bx = b % W, by = b / W;
+            int nb[4] = { bx>0?b-1:-1, bx<W-1?b+1:-1, by>0?b-W:-1, by<H-1?b+W:-1 };
             for (int k = 0; k < 4; ++k) {
                 int v = nb[k]; if (v < 0) continue;
-                int cost = bt[v] == 0 ? CW : (bt[v] == 1 ? CM : CWAT);
+                if (bt[v] == 0) continue;
+                int cost = bt[v] == 1 ? CM : (bt[v] == 2 ? CWAT_IN : CWAT_OCEAN);
                 int nd = d + cost;
-                if (nd <= MAXC && nd < dist[v]) {
-                    dist[v] = nd; prev[v] = b; nxt[v] = head[nd]; head[nd] = v;
-                }
+                if (nd <= MAXC && nd < dist[v]) { dist[v]=nd; comp[v]=comp[b]; prev[v]=b; nxt[v]=head[nd]; head[nd]=v; }
+            }
+        }
+
+    /* Candidate links where two regions' claimed areas touch (right/down). */
+    conn_link *E = NULL; long ne = 0, ecap = 0;
+    for (int y = 0; y < H; ++y)
+        for (int x = 0; x < W; ++x) {
+            size_t a = (size_t)x + (size_t)y * W;
+            if (comp[a] < 0) continue;
+            size_t vv[2] = { (x<W-1)?a+1:(size_t)-1, (y<H-1)?a+W:(size_t)-1 };
+            for (int k = 0; k < 2; ++k) {
+                size_t v = vv[k];
+                if (v == (size_t)-1 || comp[v] < 0 || comp[v] == comp[a]) continue;
+                if (ne == ecap) { long nc = ecap?ecap*2:(1<<16); conn_link *t = realloc(E,(size_t)nc*sizeof(conn_link)); if(!t) break; E=t; ecap=nc; }
+                E[ne].cost = dist[a] + dist[v]; E[ne].a = (int)a; E[ne].b = (int)v; ++ne;
+            }
+        }
+    qsort(E, (size_t)ne, sizeof(conn_link), conn_link_cmp);
+
+    int *uf = (int *)malloc((size_t)ncomp * sizeof(int));
+    if (uf) for (int i = 0; i < ncomp; ++i) uf[i] = i;
+    long connected = 0, carved = 0;
+    for (long e = 0; uf && e < ne; ++e) {
+        if (E[e].cost > MAXC) break;
+        int ca = conn_find(uf, comp[E[e].a]), cb = conn_find(uf, comp[E[e].b]);
+        if (ca == cb) continue;
+        uf[ca] = cb; ++connected;
+        for (int side = 0; side < 2; ++side) {
+            int start = side ? E[e].b : E[e].a;
+            int cur = start, last = start;
+            while (cur != -1) { last = cur; cur = prev[cur]; }
+            int zc = g->z[last];
+            for (cur = start; cur != -1; cur = prev[cur]) {
+                if (bt[cur] == 0) continue;
+                int bx = cur % W, by = cur / W;
+                for (int dy = -1; dy <= 1; ++dy)       /* widen to a ~3-wide corridor */
+                    for (int dx = -1; dx <= 1; ++dx) {
+                        int nx = bx + dx, ny = by + dy;
+                        if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+                        size_t i = (size_t)nx + (size_t)ny * W;
+                        int cc = g->cat[i];
+                        if (cc == TCAT_MOUNTAIN) {
+                            g->cat[i] = (uint8_t)TCAT_HILL; g->id[i] = tile_for_cat(TCAT_HILL);
+                            g->z[i] = (int8_t)clampi(zc, -128, 127);
+                        } else if (IS_WATER_CAT(cc)) {
+                            int wz = zc > cfg->water_z + 1 ? zc : cfg->water_z + 1;
+                            g->cat[i] = (uint8_t)TCAT_BRIDGE; g->id[i] = TILE_SAND;
+                            g->z[i] = (int8_t)clampi(wz, -128, 127);
+                        }
+                    }
+                ++carved;
             }
         }
     }
+    fprintf(stderr, "connect: %d regions, %ld links carved, %ld cells carved\n",
+            ncomp, connected, carved);
 
-    /* Cheapest approach of each non-main region to the mainland. */
-    int *bd = (int *)malloc((size_t)ncomp*sizeof(int));
-    int *bb = (int *)malloc((size_t)ncomp*sizeof(int));
-    for (int c = 0; c < ncomp; ++c) { bd[c] = INT_MAX; bb[c] = -1; }
-    for (int b = 0; b < NB; ++b) {
-        int c = comp[b];
-        if (c < 0 || c == main_c) continue;
-        if (dist[b] < bd[c]) { bd[c] = dist[b]; bb[c] = b; }
-    }
-
-    long connected = 0, skipped = 0, carved = 0;
-    for (int c = 0; c < ncomp; ++c) {
-        if (c == main_c) continue;
-        if (bb[c] < 0 || bd[c] > MAXC) { ++skipped; continue; }
-        int pl = 0;
-        for (int b = bb[c]; b != -1; b = prev[b]) q[pl++] = b;   /* path blocks */
-        if (pl < 1) continue;
-        int zc = block_walk_z(g, q[0] % BW, q[0] / BW);
-        int zm = block_walk_z(g, q[pl-1] % BW, q[pl-1] / BW);
-        for (int k = 0; k < pl; ++k) {
-            int b = q[k];
-            if (bt[b] == 0) continue;                /* already walkable */
-            double f = (pl > 1) ? (double)k / (double)(pl - 1) : 0.0;
-            int zz = zc + (int)lround((zm - zc) * f);
-            int bx = b % BW, by = b / BW;
-            for (int cy = 0; cy < 8; ++cy)
-                for (int cx = 0; cx < 8; ++cx) {
-                    size_t i = (size_t)(bx*8+cx) + (size_t)(by*8+cy)*W;
-                    int cc = g->cat[i];
-                    if (cc == TCAT_MOUNTAIN) {
-                        g->cat[i] = (uint8_t)TCAT_HILL;
-                        g->id[i]  = tile_for_cat(TCAT_HILL);
-                        g->z[i]   = (int8_t)clampi(zz, -128, 127);
-                    } else if (IS_WATER_CAT(cc)) {
-                        int wz = zz > cfg->water_z + 1 ? zz : cfg->water_z + 1;
-                        g->cat[i] = (uint8_t)TCAT_BRIDGE;
-                        g->id[i]  = TILE_SAND;
-                        g->z[i]   = (int8_t)clampi(wz, -128, 127);
-                    }
-                }
-            ++carved;
-        }
-        ++connected;
-    }
-    fprintf(stderr, "connect: %d regions, %ld linked, %ld left isolated, %ld blocks carved\n",
-            ncomp, connected, skipped, carved);
-
-    free(bt); free(comp); free(q); free(csz);
-    free(dist); free(prev); free(nxt); free(head); free(bd); free(bb);
+    free(bt); free(comp); free(dist); free(prev); free(nxt); free(head); free(E); free(uf);
 }
 
 /*
