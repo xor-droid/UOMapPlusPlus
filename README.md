@@ -102,6 +102,95 @@ directory so you can inspect each stage, plus a `final` image.
 
 ---
 
+## Gallery — one command, different seeds
+
+Same command every time — only the **seed** changes:
+
+```sh
+./build/uomappp --preset britannia --continent-count 3 --rock-density 0 \
+    --connect --clearings --mountain-slope 24 --vary --seed <SEED>
+```
+
+`--vary` re-rolls each world's climate (sea level, mountains, temperature,
+continent size) from the seed, so no two seeds share the Britannia "feel".
+**Click a map to open it full size.**
+
+<table>
+<tr>
+<td width="33%" align="center"><a href="docs/seed-42.png"><img src="docs/seed-42.png" width="100%" alt="seed 42"></a></td>
+<td width="33%" align="center"><a href="docs/seed-2024.png"><img src="docs/seed-2024.png" width="100%" alt="seed 2024"></a></td>
+<td width="33%" align="center"><a href="docs/seed-7777.png"><img src="docs/seed-7777.png" width="100%" alt="seed 7777"></a></td>
+</tr>
+<tr>
+<td align="center"><b><code>--seed 42</code></b><br><sub>warm · many mountains · 32% land<br>sea <code>-0.302</code> · mtn-level <code>0.675</code> · peaks <code>76</code> · temp <code>+0.51</code> · fill <code>1.21</code></sub></td>
+<td align="center"><b><code>--seed 2024</code></b><br><sub>cold / snowy · archipelago · 18% land<br>sea <code>-0.297</code> · mtn-level <code>0.634</code> · peaks <code>71</code> · temp <code>-0.20</code> · fill <code>1.07</code></sub></td>
+<td align="center"><b><code>--seed 7777</code></b><br><sub>warm · very mountainous · 23% land<br>sea <code>-0.320</code> · mtn-level <code>0.546</code> · peaks <code>73</code> · temp <code>+0.45</code> · fill <code>0.92</code></sub></td>
+</tr>
+</table>
+
+Seeds can be words too (`--seed Britannia`). The per-seed climate values above are
+what `--vary` derived; the full resolved config for each world:
+
+<details><summary><b>seed 42</b> — full resolved config (<code>uomappp --config &lt;file&gt;</code> reproduces it)</summary>
+
+```ini
+seed = 42
+width = 7168
+height = 4096
+sea_level = -0.30215999
+continent_count = 3
+continent_fill = 1.21226063
+mountain_level = 0.675409753
+mountain_z = 76
+river_width = 3
+temperature_bias = 0.511751699
+terrace_step = 6
+plain_z = 4
+pass_width = 10
+pass_slope = 8
+mountain_slope = 24
+rivers = true
+erosion = true
+regions = true
+wfc = true
+cellular = true
+dither = true
+terrace = true
+connect = true
+causeways = false
+clearings = true
+vary = false
+```
+</details>
+
+<details><summary><b>seed 2024</b> — full resolved config</summary>
+
+```ini
+seed = 2024
+sea_level = -0.29710582
+continent_fill = 1.06637011
+mountain_level = 0.633615129
+mountain_z = 71
+temperature_bias = -0.198732938
+# (all other keys identical to seed 42 above)
+```
+</details>
+
+<details><summary><b>seed 7777</b> — full resolved config</summary>
+
+```ini
+seed = 7777
+sea_level = -0.319616687
+continent_fill = 0.921318645
+mountain_level = 0.545848912
+mountain_z = 73
+temperature_bias = 0.452190975
+# (all other keys identical to seed 42 above)
+```
+</details>
+
+---
+
 ## Build
 
 Requires a C11 compiler and CMake. **Build single-core (`-j1`)** — a project
