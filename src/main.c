@@ -109,7 +109,10 @@ static void print_help(const char *argv0) {
 "statics<N>.mul into the output directory.\n"
 "\n"
 "Options:\n"
-"  --seed <uint64>       Master seed (default 0). Same seed => same bytes.\n"
+"  --seed <value>        Master seed (default 0). Same seed => same bytes.\n"
+"                        A number (decimal or 0x-hex, up to 64-bit) is used\n"
+"                        as-is; any word or phrase (e.g. 'Britannia') is hashed\n"
+"                        into a stable seed.\n"
 "  --config <file>       Read an INI-like config file first; CLI flags override it.\n"
 "  --map <N>             Facet / file index -> map<N>.mul triplet (default 0).\n"
 "  --width <tiles>       Map width, multiple of 8 (default 1024).\n"
@@ -389,7 +392,7 @@ int main(int argc, char **argv) {
     int c, idx;
     while ((c = getopt_long(argc, argv, optstr, longopts, &idx)) != -1) {
         switch (c) {
-            case 's': cfg.seed = strtoull(optarg, NULL, 0); break;
+            case 's': cfg.seed = config_parse_seed(optarg); break;
             case 'c': break; /* already handled in phase 1 */
             case 'm': cfg.map_index = (int)strtol(optarg, NULL, 0); break;
             case 'W': cfg.width = (int)strtol(optarg, NULL, 0); break;

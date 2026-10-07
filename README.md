@@ -166,6 +166,10 @@ you tuned on the command line, add `--dump-config world.cfg`: it writes the full
 resolved config (preset + file + flags expanded), and `--config world.cfg` then
 regenerates that exact map.
 
+> **Seeds:** `--seed` takes a number (decimal or `0x`-hex, up to 64-bit) used
+> as-is, or any word/phrase (e.g. `--seed Britannia`) which is hashed into a
+> stable 64-bit seed. The same string always makes the same world.
+
 > **Note:** `uomappp` never reads environment variables. All input is CLI flags
 > and the optional config file.
 

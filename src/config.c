@@ -98,6 +98,25 @@ void config_defaults(mapgen_config *cfg) {
     cfg->dump_config_path[0] = '\0';
 }
 
+uint64_t config_parse_seed(const char *s) {
+    if (!s || !*s) return 0;
+    /* Pure number (decimal or 0x-hex)? Use it directly so numeric seeds are
+     * unchanged. strtoull consuming the whole string => it was a number. */
+    while (*s == ' ' || *s == '\t') ++s;
+    char *end = NULL;
+    errno = 0;
+    unsigned long long v = strtoull(s, &end, 0);
+    if (end && *end == '\0' && end != s && errno == 0)
+        return (uint64_t)v;
+    /* Otherwise hash all bytes (FNV-1a, 64-bit) -> stable string seed. */
+    uint64_t h = 1469598103934665603ULL;        /* FNV offset basis */
+    for (const unsigned char *p = (const unsigned char *)s; *p; ++p) {
+        h ^= (uint64_t)*p;
+        h *= 1099511628211ULL;                    /* FNV prime */
+    }
+    return h;
+}
+
 static double clampd(double v, double lo, double hi) {
     return v < lo ? lo : (v > hi ? hi : v);
 }
@@ -151,7 +170,7 @@ int config_set_kv(mapgen_config *cfg, const char *key_in, const char *val) {
 
     errno = 0;
     if (!strcmp(key, "seed")) {
-        cfg->seed = strtoull(val, NULL, 0);
+        cfg->seed = config_parse_seed(val);
     } else if (!strcmp(key, "map")) {
         cfg->map_index = (int)strtol(val, NULL, 0);
     } else if (!strcmp(key, "width")) {

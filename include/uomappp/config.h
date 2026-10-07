@@ -102,6 +102,13 @@ typedef struct {
     char     dump_config_path[UOMG_PATH_MAX];  /* write resolved config here (empty => skip) */
 } mapgen_config;
 
+/* Parse a --seed value into the 64-bit master seed. A pure number (decimal, or
+ * 0x-hex) is used as-is, so existing numeric seeds reproduce identically; any
+ * other string (letters, words, phrases, symbols) is hashed (FNV-1a 64) into a
+ * stable seed, so "Britannia" or "my world" works and distinct strings give
+ * distinct maps. Length is effectively unlimited for string seeds. */
+uint64_t config_parse_seed(const char *s);
+
 /* Fill cfg with built-in defaults. */
 void config_defaults(mapgen_config *cfg);
 
